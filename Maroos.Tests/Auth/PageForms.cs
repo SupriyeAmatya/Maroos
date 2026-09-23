@@ -27,9 +27,10 @@ public static partial class PageForms
         return await browser.PostAsync(url, new FormUrlEncodedContent(fields));
     }
 
-    public static Task<HttpResponseMessage> RegisterAsync(HttpClient browser, string email) =>
+    public static Task<HttpResponseMessage> RegisterAsync(HttpClient browser, string email, string displayName = "Test Player") =>
         PostFormAsync(browser, "/Account/Register", "register", new()
         {
+            ["Input.DisplayName"] = displayName,
             ["Input.Email"] = email,
             ["Input.Password"] = Password,
             ["Input.ConfirmPassword"] = Password,

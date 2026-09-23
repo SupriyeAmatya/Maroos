@@ -14,9 +14,12 @@ public class MaroosWebFactory : WebApplicationFactory<Program>
 {
     private readonly string _dbPath = Path.Combine(Path.GetTempPath(), $"maroos-test-{Guid.NewGuid():N}.db");
 
+    public string UploadsPath { get; } = Path.Combine(Path.GetTempPath(), $"maroos-uploads-{Guid.NewGuid():N}");
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseSetting("ConnectionStrings:DefaultConnection", $"DataSource={_dbPath}");
+        builder.UseSetting("Uploads:Path", UploadsPath);
         // Tests never reach the real Scryfall API.
         builder.ConfigureTestServices(services =>
         {
@@ -36,6 +39,8 @@ public class MaroosWebFactory : WebApplicationFactory<Program>
         base.Dispose(disposing);
         Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
         File.Delete(_dbPath);
+        if (Directory.Exists(UploadsPath))
+            Directory.Delete(UploadsPath, recursive: true);
     }
 }
 

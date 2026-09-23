@@ -3,6 +3,7 @@ using Maroos.Web.Services;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.FileProviders;
 using Maroos.Web.Components;
 using Maroos.Web.Components.Account;
 using Maroos.Web.Data;
@@ -57,6 +58,12 @@ builder.Services.AddHttpClient<ScryfallClient>(client =>
 });
 builder.Services.AddScoped<CardService>();
 builder.Services.AddScoped<DeckService>();
+builder.Services.AddScoped<AuctionService>();
+
+// Auction photos: saved re-encoded under Uploads:Path and served at Uploads:RequestPath.
+var photoOptions = builder.Configuration.GetSection("Uploads").Get<PhotoStorageOptions>() ?? new PhotoStorageOptions();
+builder.Services.AddSingleton(photoOptions);
+builder.Services.AddSingleton<AuctionPhotoStore>();
 
 builder.Services.AddIdentityCore<ApplicationUser>(options =>
     {
@@ -94,6 +101,20 @@ app.UseHttpsRedirection();
 app.UseAntiforgery();
 
 app.MapStaticAssets();
+
+// MapStaticAssets only serves files that exist at build time; uploaded photos need their own mapping.
+var photoStore = app.Services.GetRequiredService<AuctionPhotoStore>();
+Directory.CreateDirectory(photoStore.Root);
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new PhysicalFileProvider(photoStore.Root),
+    RequestPath = photoOptions.RequestPath,
+    OnPrepareResponse = context =>
+    {
+        context.Context.Response.Headers.XContentTypeOptions = "nosniff";
+        context.Context.Response.Headers.CacheControl = "public, max-age=604800";
+    },
+});
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 

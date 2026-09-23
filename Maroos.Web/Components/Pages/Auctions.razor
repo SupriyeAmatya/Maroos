@@ -1,7 +1,144 @@
 @page "/auctions"
 
+@inject AuctionService AuctionService
+@inject TimeProvider Clock
+
 <PageTitle>Auctions · Maroos</PageTitle>
 
-<h1>Auctions</h1>
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+    <h1 class="mb-0">Auctions</h1>
+    <a class="btn btn-primary" href="auctions/new">List a card</a>
+</div>
 
-<p>Coming in Phase 5.</p>
+<form class="auction-filters mb-4" method="get" action="auctions" role="search" aria-label="Filter auctions">
+    <div class="auction-filter auction-filter-wide">
+        <label for="filter-q" class="form-label small mb-1">Card name</label>
+        <input id="filter-q" name="q" class="form-control" value="@Q" placeholder="Any card" />
+    </div>
+    <div class="auction-filter">
+        <label for="filter-set" class="form-label small mb-1">Set</label>
+        <select id="filter-set" name="set" class="form-select">
+            <option value="">Any set</option>
+            @foreach (var option in sets)
+            {
+                <option value="@option.Code" selected="@(string.Equals(option.Code, Set, StringComparison.OrdinalIgnoreCase))">@option.Name (@option.Count)</option>
+            }
+        </select>
+    </div>
+    <div class="auction-filter auction-filter-narrow">
+        <label for="filter-max" class="form-label small mb-1">Max price</label>
+        <div class="input-group">
+            <span class="input-group-text">$</span>
+            <input id="filter-max" name="max" class="form-control" inputmode="decimal" value="@Max" placeholder="Any" />
+        </div>
+    </div>
+    <div class="auction-filter">
+        <label for="filter-sort" class="form-label small mb-1">Sort</label>
+        <select id="filter-sort" name="sort" class="form-select">
+            @foreach (var (value, label) in SortOptions)
+            {
+                <option value="@value" selected="@(value == sort)">@label</option>
+            }
+        </select>
+    </div>
+    <div class="auction-filter-submit">
+        <button type="submit" class="btn btn-outline-primary">Apply</button>
+    </div>
+</form>
+
+@if (maxInvalid)
+{
+    <div class="alert alert-warning py-2">“@Max” isn't a price, so the max price filter is off.</div>
+}
+
+@if (auctions.Count == 0)
+{
+    <p>
+        @(IsFiltered ? "No open auctions match those filters." : "No open auctions right now.")
+        <a href="auctions/new">List a card</a>@(IsFiltered ? " or " : ".")
+        @if (IsFiltered)
+        {
+            <a href="auctions">clear the filters</a><text>.</text>
+        }
+    </p>
+}
+else
+{
+    <p class="text-muted small">@auctions.Count open auction@(auctions.Count == 1 ? "" : "s")</p>
+    <div class="auction-grid">
+        @foreach (var auction in auctions)
+        {
+            <a class="auction-tile card" href="auctions/@auction.Id">
+                <div class="auction-tile-image">
+                    @if (auction.ImageUrl is { } image)
+                    {
+                        <img src="@image" alt="@auction.CardName" loading="lazy" />
+                    }
+                    else
+                    {
+                        <span class="card-grid-placeholder">@auction.CardName</span>
+                    }
+                </div>
+                <div class="card-body p-2">
+                    <div class="auction-tile-name">@auction.CardName</div>
+                    <div class="auction-tile-meta">
+                        @auction.SetName · @AuctionRules.ConditionCode(auction.Condition)@(auction.IsFoil ? " · Foil" : "")
+                    </div>
+                    <div class="d-flex justify-content-between align-items-baseline mt-1">
+                        <span class="auction-tile-price">@Money.FormatUsd(auction.CurrentCents)</span>
+                        <span class="auction-tile-time">@AuctionRules.TimeLeft(now, auction.EndsAtUtc) left</span>
+                    </div>
+                </div>
+            </a>
+        }
+    </div>
+}
+
+@code {
+    private static readonly (string Value, string Label)[] SortOptions =
+    [
+        ("ending", "Ending soonest"),
+        ("newest", "Newly listed"),
+        ("price", "Price: low to high"),
+        ("price-desc", "Price: high to low"),
+    ];
+
+    [SupplyParameterFromQuery] public string? Q { get; set; }
+    [SupplyParameterFromQuery] public string? Set { get; set; }
+    [SupplyParameterFromQuery] public string? Max { get; set; }
+    [SupplyParameterFromQuery(Name = "sort")] public string? SortParam { get; set; }
+
+    private IReadOnlyList<AuctionSummary> auctions = [];
+    private IReadOnlyList<AuctionSetOption> sets = [];
+    private DateTime now;
+    private string sort = "ending";
+    private bool maxInvalid;
+
+    private bool IsFiltered => !string.IsNullOrWhiteSpace(Q) || !string.IsNullOrWhiteSpace(Set) || !string.IsNullOrWhiteSpace(Max);
+
+    protected override async Task OnInitializedAsync()
+    {
+        now = Clock.GetUtcNow().UtcDateTime;
+        sort = SortOptions.Any(o => o.Value == SortParam) ? SortParam! : "ending";
+
+        long? maxCents = null;
+        if (!string.IsNullOrWhiteSpace(Max))
+        {
+            if (Money.TryParseUsd(Max, out var cents))
+                maxCents = cents;
+            else
+                maxInvalid = true;
+        }
+
+        var filter = new AuctionFilter(Q, Set, maxCents, sort switch
+        {
+            "newest" => AuctionSort.Newest,
+            "price" => AuctionSort.PriceLow,
+            "price-desc" => AuctionSort.PriceHigh,
+            _ => AuctionSort.EndingSoon,
+        });
+
+        sets = await AuctionService.ListSetsAsync();
+        auctions = await AuctionService.ListAsync(filter);
+    }
+}

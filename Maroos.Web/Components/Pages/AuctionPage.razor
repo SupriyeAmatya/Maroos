@@ -1,0 +1,160 @@
+@page "/auctions/{Id:guid}"
+@rendermode InteractiveServer
+
+@inject AuctionService AuctionService
+@inject TimeProvider Clock
+
+@if (view is null)
+{
+    <PageTitle>@(loading ? "Auction" : "Auction not found") · Maroos</PageTitle>
+    @if (loading)
+    {
+        <p class="text-muted">Loading auction…</p>
+    }
+    else
+    {
+        <h1>Auction not found</h1>
+        <p>This listing doesn't exist. <a href="auctions">Browse open auctions</a>.</p>
+    }
+}
+else
+{
+    var auction = view.Auction;
+    <PageTitle>@auction.CardName auction · Maroos</PageTitle>
+
+    <div class="auction-detail">
+        <div class="auction-detail-images">
+            @if (auction.PhotoPath is { } photo)
+            {
+                <figure class="mb-0">
+                    <img src="@photo" alt="Seller's photo of @auction.CardName" />
+                    <figcaption class="small text-muted mt-1">Seller's photo</figcaption>
+                </figure>
+            }
+            @if (view.Card?.FrontImage?.Normal is { } image)
+            {
+                <figure class="mb-0 @(auction.PhotoPath is null ? "" : "auction-detail-reference")">
+                    <img src="@image" alt="@auction.CardName (@auction.SetName)" />
+                    @if (auction.PhotoPath is not null)
+                    {
+                        <figcaption class="small text-muted mt-1">Scryfall image of this printing</figcaption>
+                    }
+                </figure>
+            }
+        </div>
+
+        <div class="auction-detail-info">
+            <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
+                <h1 class="mb-0 me-1"><a href="card/@auction.ScryfallId" class="text-reset text-decoration-none">@auction.CardName</a></h1>
+                <span class="badge @StatusBadgeClass">@StatusLabel</span>
+            </div>
+            <p class="text-muted mb-3">
+                @auction.SetName (@auction.SetCode.ToUpperInvariant()) #@auction.CollectorNumber
+            </p>
+
+            <dl class="auction-facts">
+                <dt>Current price</dt>
+                <dd class="auction-price">@Money.FormatUsd(view.CurrentCents)</dd>
+
+                <dt>Condition</dt>
+                <dd>@AuctionRules.ConditionLabel(auction.Condition)@(auction.IsFoil ? ", foil" : "")</dd>
+
+                <dt>Starting price</dt>
+                <dd>@Money.FormatUsd(auction.StartCents)</dd>
+
+                <dt>Bid increment</dt>
+                <dd>@Money.FormatUsd(auction.IncrementCents)</dd>
+
+                <dt>@(view.IsOpen ? "Ends" : "Ended")</dt>
+                <dd>
+                    <time datetime="@auction.EndsAtUtc.ToString("o")">@auction.EndsAtUtc.ToString("MMM d, yyyy HH:mm") UTC</time>
+                    @if (view.IsOpen)
+                    {
+                        <span class="text-muted"> · @AuctionRules.TimeLeft(Clock.GetUtcNow().UtcDateTime, auction.EndsAtUtc) left</span>
+                    }
+                </dd>
+
+                <dt>Seller</dt>
+                <dd>@view.SellerName@(view.IsSeller ? " (you)" : "")</dd>
+            </dl>
+
+            @if (view.Card?.DeckPriceCents is { } market)
+            {
+                <p class="small text-muted">Scryfall lists this printing at @Money.FormatUsd(market).</p>
+            }
+
+            <div role="status" aria-live="polite">
+                @if (message is not null)
+                {
+                    <div class="alert @(messageIsError ? "alert-warning" : "alert-success") py-2">@message</div>
+                }
+            </div>
+
+            @if (view.CanCancel)
+            {
+                <div class="d-flex flex-wrap align-items-center gap-2 mt-3">
+                    @if (confirmingCancel)
+                    {
+                        <span>Cancel this auction? It can't be reopened.</span>
+                        <button type="button" class="btn btn-danger" disabled="@busy" @onclick="CancelAsync">Cancel auction</button>
+                        <button type="button" class="btn btn-outline-secondary" @onclick="() => confirmingCancel = false">Keep it open</button>
+                    }
+                    else
+                    {
+                        <button type="button" class="btn btn-outline-danger" @onclick="() => confirmingCancel = true">Cancel auction</button>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    private AuctionView? view;
+    private string? userId;
+    private bool loading = true;
+    private bool busy;
+    private bool confirmingCancel;
+    private string? message;
+    private bool messageIsError;
+
+    private string StatusLabel => view!.Auction.Status switch
+    {
+        AuctionStatus.Cancelled => "Cancelled",
+        _ when view.IsOpen => "Open",
+        _ => "Ended",
+    };
+
+    private string StatusBadgeClass => view!.IsOpen ? "text-bg-success" : "text-bg-secondary";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        userId = (await AuthState).User.GetUserId();
+        view = await AuctionService.GetAsync(Id, userId);
+        loading = false;
+    }
+
+    private async Task CancelAsync()
+    {
+        busy = true;
+        try
+        {
+            await AuctionService.CancelAsync(Id, userId!);
+            (message, messageIsError) = ("Auction cancelled.", false);
+        }
+        catch (Exception ex) when (ex is AuctionAccessException or AuctionValidationException or KeyNotFoundException)
+        {
+            (message, messageIsError) = (ex.Message, true);
+        }
+        finally
+        {
+            confirmingCancel = false;
+            view = await AuctionService.GetAsync(Id, userId);
+            busy = false;
+        }
+    }
+}

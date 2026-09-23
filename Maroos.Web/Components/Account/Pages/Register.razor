@@ -33,6 +33,12 @@
                 <ValidationMessage For="() => Input.Email" class="text-danger" />
             </div>
             <div class="form-floating mb-3">
+                <InputText @bind-Value="Input.DisplayName" id="Input.DisplayName" class="form-control" autocomplete="nickname" aria-required="true" aria-describedby="display-name-help" placeholder="Your name" maxlength="40" />
+                <label for="Input.DisplayName">Display name</label>
+                <div id="display-name-help" class="form-text">Shown to other players on your decks, listings and bids. Your email stays private.</div>
+                <ValidationMessage For="() => Input.DisplayName" class="text-danger" />
+            </div>
+            <div class="form-floating mb-3">
                 <InputText type="password" @bind-Value="Input.Password" id="Input.Password" class="form-control" autocomplete="new-password" aria-required="true" placeholder="password" />
                 <label for="Input.Password">Password</label>
                 <ValidationMessage For="() => Input.Password" class="text-danger" />
@@ -73,6 +79,7 @@
     public async Task RegisterUser(EditContext editContext)
     {
         var user = CreateUser();
+        user.DisplayName = ApplicationUser.CleanDisplayName(Input.DisplayName);
 
         await UserStore.SetUserNameAsync(user, Input.Email, CancellationToken.None);
         var emailStore = GetEmailStore();
@@ -137,6 +144,12 @@
         [EmailAddress]
         [Display(Name = "Email")]
         public string Email { get; set; } = "";
+
+        [Required(ErrorMessage = "Choose a display name.")]
+        [StringLength(ApplicationUser.MaxDisplayNameLength, MinimumLength = ApplicationUser.MinDisplayNameLength,
+            ErrorMessage = "Display names are {2} to {1} characters.")]
+        [Display(Name = "Display name")]
+        public string DisplayName { get; set; } = "";
 
         [Required]
         [StringLength(100, ErrorMessage = "The {0} must be at least {2} and at max {1} characters long.", MinimumLength = 6)]

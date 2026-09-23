@@ -1,3 +1,4 @@
+using Maroos.Core.Auctions;
 using Maroos.Core.Decks;
 using Maroos.Core.Scryfall;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
@@ -10,10 +11,16 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<CachedCard> CachedCards => Set<CachedCard>();
     public DbSet<Deck> Decks => Set<Deck>();
     public DbSet<DeckCard> DeckCards => Set<DeckCard>();
+    public DbSet<Auction> Auctions => Set<Auction>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
+
+        builder.Entity<ApplicationUser>(user =>
+        {
+            user.Property(u => u.DisplayName).HasMaxLength(ApplicationUser.MaxDisplayNameLength);
+        });
 
         builder.Entity<CachedCard>(card =>
         {
@@ -39,6 +46,20 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             card.Property(c => c.CardName).HasMaxLength(200);
             card.Property(c => c.SetCode).HasMaxLength(10);
             card.Property(c => c.CollectorNumber).HasMaxLength(20);
+        });
+
+        builder.Entity<Auction>(auction =>
+        {
+            auction.HasKey(a => a.Id);
+            auction.HasOne<ApplicationUser>().WithMany().HasForeignKey(a => a.SellerId).OnDelete(DeleteBehavior.Cascade);
+            auction.HasOne<ApplicationUser>().WithMany().HasForeignKey(a => a.WinnerId).OnDelete(DeleteBehavior.SetNull);
+            auction.Property(a => a.CardName).HasMaxLength(200);
+            auction.Property(a => a.SetCode).HasMaxLength(10);
+            auction.Property(a => a.SetName).HasMaxLength(100);
+            auction.Property(a => a.CollectorNumber).HasMaxLength(20);
+            auction.Property(a => a.PhotoPath).HasMaxLength(200);
+            auction.HasIndex(a => new { a.Status, a.EndsAtUtc });
+            auction.HasIndex(a => a.SellerId);
         });
     }
 }

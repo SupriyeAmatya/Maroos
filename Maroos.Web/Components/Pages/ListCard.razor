@@ -1,0 +1,238 @@
+@page "/auctions/new"
+@rendermode InteractiveServer
+
+@using Microsoft.AspNetCore.Authorization
+
+@attribute [Authorize]
+
+@inject AuctionService AuctionService
+@inject AuctionPhotoStore Photos
+@inject CardService Cards
+@inject NavigationManager Navigation
+
+<PageTitle>List a card · Maroos</PageTitle>
+
+<h1>List a card</h1>
+<p class="text-muted">Auctions settle between buyer and seller: when yours ends, the winner contacts you to arrange payment and shipping.</p>
+
+<div class="new-auction">
+    <div class="new-auction-form">
+        <section class="mb-4" aria-labelledby="step-card">
+            <h2 id="step-card" class="h5">1. Card</h2>
+            <CardAutocomplete ButtonText="Find" ListId="auction-card-suggestions" Disabled="busy"
+                              AriaLabel="Card name" Placeholder="Card name, e.g. Sol Ring" OnSubmit="FindPrintingsAsync" />
+
+            @if (printingsError is not null)
+            {
+                <div class="alert alert-warning py-2 mt-2 mb-0">@printingsError</div>
+            }
+            else if (printings.Count > 0)
+            {
+                <label for="auction-printing" class="form-label mt-3">Printing</label>
+                <select id="auction-printing" class="form-select" value="@selected?.Id" @onchange="SelectPrinting">
+                    @foreach (var printing in printings)
+                    {
+                        <option value="@printing.Id">@PrintingLabel(printing)</option>
+                    }
+                </select>
+            }
+        </section>
+
+        <section class="mb-4" aria-labelledby="step-details">
+            <h2 id="step-details" class="h5">2. Condition and photo</h2>
+            <div class="row g-3">
+                <div class="col-sm-8">
+                    <label for="auction-condition" class="form-label">Condition</label>
+                    <select id="auction-condition" class="form-select" @bind="condition">
+                        @foreach (var value in Enum.GetValues<CardCondition>())
+                        {
+                            <option value="@value">@AuctionRules.ConditionLabel(value) (@AuctionRules.ConditionCode(value))</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-sm-4 d-flex align-items-end">
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" id="auction-foil" @bind="isFoil" />
+                        <label class="form-check-label" for="auction-foil">Foil</label>
+                    </div>
+                </div>
+                <div class="col-12">
+                    <label for="auction-photo" class="form-label">Photo <span class="text-muted">(optional)</span></label>
+                    <InputFile id="auction-photo" class="form-control" accept="image/jpeg,image/png" OnChange="OnPhotoChosen" disabled="@busy" />
+                    <div class="form-text">
+                        JPG or PNG, up to 5 MB. A photo of your actual copy helps buyers trust the condition.
+                        Location data is removed before it's saved. Without a photo, Scryfall's image is shown.
+                    </div>
+                    @if (photoError is not null)
+                    {
+                        <div class="text-danger small mt-1">@photoError</div>
+                    }
+                </div>
+            </div>
+        </section>
+
+        <section class="mb-4" aria-labelledby="step-price">
+            <h2 id="step-price" class="h5">3. Price and length</h2>
+            <div class="row g-3">
+                <div class="col-sm-4">
+                    <label for="auction-start" class="form-label">Starting price</label>
+                    <div class="input-group">
+                        <span class="input-group-text">$</span>
+                        <input id="auction-start" class="form-control" inputmode="decimal" @bind="startPrice" placeholder="5.00" />
+                    </div>
+                    @if (selected?.DeckPriceCents is { } market)
+                    {
+                        <div class="form-text">Scryfall price: @Money.FormatUsd(market)</div>
+                    }
+                </div>
+                <div class="col-sm-4">
+                    <label for="auction-increment" class="form-label">Minimum bid increment</label>
+                    <div class="input-group">
+                        <span class="input-group-text">$</span>
+                        <input id="auction-increment" class="form-control" inputmode="decimal" @bind="increment" />
+                    </div>
+                </div>
+                <div class="col-sm-4">
+                    <label for="auction-duration" class="form-label">Runs for</label>
+                    <select id="auction-duration" class="form-select" @bind="durationDays">
+                        @foreach (var days in AuctionRules.DurationChoices)
+                        {
+                            <option value="@days">@days day@(days == 1 ? "" : "s")</option>
+                        }
+                    </select>
+                </div>
+            </div>
+        </section>
+
+        <div role="alert" aria-live="polite">
+            @if (errors.Count > 0)
+            {
+                <div class="alert alert-danger">
+                    <ul class="mb-0">
+                        @foreach (var error in errors)
+                        {
+                            <li>@error</li>
+                        }
+                    </ul>
+                </div>
+            }
+        </div>
+
+        <button type="button" class="btn btn-primary btn-lg" disabled="@busy" @onclick="ListAsync">
+            @(busy ? "Listing…" : "List card")
+        </button>
+        <a href="auctions" class="btn btn-link">Cancel</a>
+    </div>
+
+    <aside class="new-auction-preview" aria-label="Selected printing">
+        @if (selected?.FrontImage?.Normal is { } image)
+        {
+            <img src="@image" alt="@selected.Name" />
+            <p class="small text-muted mt-2 mb-0">@PrintingLabel(selected)</p>
+        }
+    </aside>
+</div>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    private IReadOnlyList<ScryfallCard> printings = [];
+    private ScryfallCard? selected;
+    private string? printingsError;
+
+    private CardCondition condition = CardCondition.NearMint;
+    private bool isFoil;
+    private IBrowserFile? photo;
+    private string? photoError;
+
+    private string startPrice = "";
+    private string increment = Money.FormatInput(AuctionRules.DefaultIncrementCents);
+    private int durationDays = 7;
+
+    private List<string> errors = [];
+    private bool busy;
+
+    /// <summary>Loads every paper printing of the chosen card, newest first.</summary>
+    private async Task FindPrintingsAsync(CardAutocompleteSubmit submit)
+    {
+        busy = true;
+        printingsError = null;
+        try
+        {
+            var results = await Cards.SearchAsync($"!\"{submit.Text}\" unique:prints -is:digital order:released dir:desc");
+            printings = results.Data;
+            selected = printings.FirstOrDefault();
+            if (selected is null)
+                printingsError = $"Scryfall has no paper card named “{submit.Text}”. Pick a name from the suggestions.";
+        }
+        catch (HttpRequestException)
+        {
+            printingsError = "Couldn't reach Scryfall. Try again in a moment.";
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private void SelectPrinting(ChangeEventArgs e) =>
+        selected = printings.FirstOrDefault(p => p.Id.ToString() == e.Value?.ToString()) ?? selected;
+
+    private static string PrintingLabel(ScryfallCard card) =>
+        $"{card.SetName} ({card.Set.ToUpperInvariant()}) #{card.CollectorNumber}";
+
+    private void OnPhotoChosen(InputFileChangeEventArgs e)
+    {
+        photo = null;
+        photoError = null;
+        var file = e.File;
+        if (!AuctionPhotoStore.AcceptedTypes.Contains(file.ContentType))
+            photoError = "Upload a JPG or PNG photo.";
+        else if (file.Size > AuctionPhotoStore.MaxUploadBytes)
+            photoError = "Photos can be up to 5 MB.";
+        else
+            photo = file;
+    }
+
+    private async Task ListAsync()
+    {
+        errors = [];
+        if (selected is null)
+            errors.Add("Find the card you're selling first.");
+        if (!Money.TryParseUsd(startPrice, out var startCents))
+            errors.Add("Enter a starting price, like 5.00.");
+        if (!Money.TryParseUsd(increment, out var incrementCents))
+            errors.Add("Enter a bid increment, like 1.00.");
+        if (photoError is not null)
+            errors.Add(photoError);
+        if (errors.Count > 0)
+            return;
+
+        busy = true;
+        string? photoPath = null;
+        try
+        {
+            if (photo is not null)
+            {
+                await using var stream = photo.OpenReadStream(AuctionPhotoStore.MaxUploadBytes);
+                photoPath = await Photos.SaveAsync(stream);
+            }
+
+            var sellerId = (await AuthState).User.GetUserId()!;
+            var auction = await AuctionService.CreateAsync(sellerId,
+                new NewAuction(selected!.Id, condition, isFoil, startCents, incrementCents, durationDays, photoPath));
+            Navigation.NavigateTo($"auctions/{auction.Id}");
+        }
+        catch (Exception ex) when (ex is AuctionValidationException or PhotoRejectedException or IOException)
+        {
+            Photos.Delete(photoPath);
+            errors = ex is AuctionValidationException validation ? [.. validation.Errors]
+                   : ex is PhotoRejectedException ? [ex.Message]
+                   : ["Couldn't read that photo. Try choosing it again."];
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+}
