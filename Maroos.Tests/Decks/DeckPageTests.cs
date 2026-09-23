@@ -192,6 +192,58 @@ public sealed class DeckPageTests : BunitContext
     }
 
     [Fact]
+    public async Task A_banned_card_shows_a_warning_and_flags_its_row()
+    {
+        SignInAs(_alice);
+        var deck = await _decks.CreateAsync(_alice, "Burn", "historic");
+        await _decks.ImportAsync(deck.Id, _alice, "4 Lightning Bolt\n56 Mountain", replace: false);
+
+        var page = RenderDeck(deck.Id);
+
+        var issues = page.Find("#deck-issues");
+        Assert.Contains("Not legal in Historic yet", issues.TextContent);
+        Assert.Equal(["Lightning Bolt is banned in Historic."], page.FindAll("#deck-issues li").Select(li => li.TextContent));
+        Assert.Contains("1 issue", page.Find(".deck-legal-badge").TextContent);
+
+        var boltRow = page.FindAll(".deck-row").Single(r => r.QuerySelector(".deck-row-name")!.TextContent == "Lightning Bolt");
+        Assert.Contains("deck-row-issue", boltRow.ClassName);
+        Assert.Equal("Banned", boltRow.QuerySelector(".deck-row-flag")!.TextContent);
+    }
+
+    [Fact]
+    public async Task A_legal_deck_says_so_and_its_curve_matches_a_manual_count()
+    {
+        SignInAs(_alice);
+        var id = await DeckAsync(isPublic: false, "4 Lightning Bolt\n4 Delver of Secrets\n52 Mountain");
+
+        var page = RenderDeck(id);
+
+        Assert.Empty(page.FindAll("#deck-issues"));
+        Assert.Contains("Legal in Modern", page.Find(".deck-legal-badge").TextContent);
+
+        // Manual count: Lightning Bolt (MV 1) ×4 + Delver of Secrets (MV 1) ×4; Mountains aren't on the curve.
+        Assert.Equal(["0", "8", "0", "0", "0", "0", "0", "0"], page.FindAll(".curve-bar").Select(b => b.GetAttribute("data-count")));
+        Assert.Equal("Lands", CardTypes.GroupHeading(CardTypes.Land));
+        Assert.Contains("52", page.FindAll(".deck-types tr").Single(r => r.GetAttribute("data-type") == CardTypes.Land).TextContent);
+    }
+
+    [Fact]
+    public async Task Changing_the_format_rechecks_legality()
+    {
+        SignInAs(_alice);
+        var id = await DeckAsync(isPublic: false, "1 Sol Ring\n59 Mountain");
+        var page = RenderDeck(id);
+        Assert.Equal(["Sol Ring isn't legal in Modern."], page.FindAll("#deck-issues li").Select(li => li.TextContent));
+
+        page.FindAll(".deck-toolbar button").Single(b => b.TextContent.Trim() == "Settings").Click();
+        page.Find("#settings-format").Change("vintage");
+        page.FindAll(".deck-panel button").Single(b => b.TextContent.Trim() == "Save").Click();
+
+        page.WaitForAssertion(() => Assert.Empty(page.FindAll("#deck-issues")));
+        Assert.Contains("Legal in Vintage", page.Find(".deck-legal-badge").TextContent);
+    }
+
+    [Fact]
     public async Task Owner_can_rename_and_make_the_deck_public()
     {
         SignInAs(_alice);

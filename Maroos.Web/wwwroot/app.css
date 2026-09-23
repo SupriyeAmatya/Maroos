@@ -266,3 +266,115 @@ h1:focus {
         display: none;
     }
 }
+
+/* Deck stats and legality */
+.viz-root {
+    --viz-series-1: #2a78d6;
+    --viz-text-primary: #0b0b0b;
+    --viz-text-secondary: #52514e;
+    --viz-axis: #c9c8c2;
+}
+
+/* The site follows Bootstrap's theme, not the OS: dark steps apply only when the page opts into dark. */
+[data-bs-theme="dark"] .viz-root {
+    --viz-series-1: #3987e5;
+    --viz-text-primary: #ffffff;
+    --viz-text-secondary: #c3c2b7;
+    --viz-axis: #4a4945;
+}
+
+.deck-stats {
+    margin-top: 1.5rem;
+}
+
+.deck-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 1rem;
+    align-items: start;
+}
+
+@media (min-width: 720px) {
+    .deck-stat-curve {
+        grid-column: span 2;
+    }
+}
+
+.deck-stat-title {
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+}
+
+.deck-stat-sub {
+    font-size: 0.875rem;
+    color: var(--viz-text-secondary, #6c757d);
+}
+
+.curve-chart {
+    display: block;
+    width: 100%;
+    max-width: 440px;
+    height: auto;
+    overflow: visible;
+}
+
+.curve-baseline {
+    stroke: var(--viz-axis);
+    stroke-width: 1;
+}
+
+.curve-hit {
+    fill: transparent;
+}
+
+.curve-fill {
+    fill: var(--viz-series-1);
+    transition: opacity 0.1s ease-in-out;
+}
+
+.curve-bar:hover .curve-fill {
+    opacity: 0.8;
+}
+
+.curve-bar:hover .curve-label,
+.curve-bar:hover .curve-count {
+    fill: var(--viz-text-primary);
+    font-weight: 600;
+}
+
+.curve-label,
+.curve-count {
+    text-anchor: middle;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+}
+
+.curve-label {
+    fill: var(--viz-text-primary);
+}
+
+.curve-count {
+    fill: var(--viz-text-secondary);
+}
+
+.deck-price {
+    font-size: 2rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.1;
+}
+
+.deck-row-flag {
+    flex: 0 0 auto;
+    font-size: 0.7rem;
+}
+
+.deck-row-issue .deck-row-name {
+    color: #b02a37;
+}
+
+.deck-colors th,
+.deck-colors td {
+    white-space: nowrap;
+}

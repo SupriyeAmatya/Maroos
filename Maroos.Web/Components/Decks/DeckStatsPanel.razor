@@ -1,0 +1,134 @@
+@* Mana curve (bar chart), colors, card types and total price for a deck. *@
+
+<section class="deck-stats viz-root" aria-labelledby="deck-stats-heading">
+    <h2 id="deck-stats-heading" class="h5 mb-3">Deck stats</h2>
+
+    <div class="deck-stats-grid">
+        <figure class="deck-stat deck-stat-curve card card-body mb-0">
+            <figcaption class="deck-stat-title" id="curve-title">Mana curve</figcaption>
+            <p class="deck-stat-sub" id="curve-desc">
+                @Stats.NonLandCount non-land card@(Stats.NonLandCount == 1 ? "" : "s") · average mana value @Stats.AverageManaValue.ToString("0.##")
+            </p>
+            <svg class="curve-chart" viewBox="0 0 @N(Width) @N(Height)" role="img" aria-labelledby="curve-title curve-desc">
+                <line class="curve-baseline" x1="@N(PlotLeft)" x2="@N(Width - PlotLeft)" y1="@N(Baseline)" y2="@N(Baseline)" />
+                @for (var i = 0; i < Stats.ManaCurve.Count; i++)
+                {
+                    var count = Stats.ManaCurve[i];
+                    var x = PlotLeft + i * Slot;
+                    var barHeight = BarHeight(count);
+                    <g class="curve-bar" data-mana-value="@DeckStats.CurveLabels[i]" data-count="@count">
+                        <title>Mana value @DeckStats.CurveLabels[i]: @count card@(count == 1 ? "" : "s")</title>
+                        @* Hit target is the whole column, bigger than the bar. *@
+                        <rect class="curve-hit" x="@N(x)" y="0" width="@N(Slot)" height="@N(Height)" />
+                        @if (count > 0)
+                        {
+                            <path class="curve-fill" d="@BarPath(x + (Slot - BarWidth) / 2, barHeight)" />
+                        }
+                        <text class="curve-label" x="@N(x + Slot / 2)" y="@N(Baseline + 16)">@DeckStats.CurveLabels[i]</text>
+                        <text class="curve-count" x="@N(x + Slot / 2)" y="@N(Baseline + 32)">@count</text>
+                    </g>
+                }
+            </svg>
+            <table class="visually-hidden">
+                <caption>Mana curve</caption>
+                <thead><tr><th scope="col">Mana value</th><th scope="col">Cards</th></tr></thead>
+                <tbody>
+                    @for (var i = 0; i < Stats.ManaCurve.Count; i++)
+                    {
+                        <tr><th scope="row">@DeckStats.CurveLabels[i]</th><td>@Stats.ManaCurve[i]</td></tr>
+                    }
+                </tbody>
+            </table>
+        </figure>
+
+        <div class="deck-stat card card-body mb-0">
+            <h3 class="deck-stat-title">Colors</h3>
+            @if (Stats.Colors.Count == 0)
+            {
+                <p class="text-muted mb-0">No colored cards yet.</p>
+            }
+            else
+            {
+                <table class="table table-sm mb-0 deck-colors">
+                    <thead>
+                        <tr>
+                            <th scope="col">Color</th>
+                            <th scope="col" class="text-end">Cards</th>
+                            <th scope="col" class="text-end" title="Mana symbols in costs">Symbols</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var color in Stats.Colors)
+                        {
+                            <tr data-color="@color.Color">
+                                <th scope="row" class="fw-normal">
+                                    <img class="mana-symbol" src="@ManaSymbols.SvgUrl(color.Color)" alt="" /> @color.Name
+                                </th>
+                                <td class="text-end">@color.Cards</td>
+                                <td class="text-end">@color.Pips</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+
+        <div class="deck-stat card card-body mb-0">
+            <h3 class="deck-stat-title">Card types</h3>
+            <table class="table table-sm mb-0 deck-types">
+                <tbody>
+                    @foreach (var (type, count) in Stats.Types)
+                    {
+                        <tr data-type="@type">
+                            <th scope="row" class="fw-normal">@CardTypes.GroupHeading(type)</th>
+                            <td class="text-end">@count</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <div class="deck-stat card card-body mb-0">
+            <h3 class="deck-stat-title">Price</h3>
+            <p class="deck-price mb-1">@Money.FormatUsd(Stats.TotalPriceCents)</p>
+            <p class="deck-stat-sub mb-0">
+                Scryfall USD prices for these printings, all boards included.
+                @if (Stats.UnpricedCount > 0)
+                {
+                    <span>@Stats.UnpricedCount card@(Stats.UnpricedCount == 1 ? " has" : "s have") no price.</span>
+                }
+            </p>
+        </div>
+    </div>
+</section>
+
+@code {
+    private const double Width = 360;
+    private const double Height = 170;
+    private const double PlotLeft = 8;
+    private const double Baseline = 128;
+    private const double PlotTop = 8;
+    private const double BarWidth = 28;
+    private const double Radius = 4;
+    private static readonly double Slot = (Width - 2 * PlotLeft) / 8;
+
+    [Parameter, EditorRequired] public DeckStats Stats { get; set; } = default!;
+
+    /// <summary>SVG coordinates must use "." whatever the server's culture.</summary>
+    private static string N(double value) => value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+
+    private double BarHeight(int count)
+    {
+        var max = Stats.ManaCurve.Max();
+        return max == 0 ? 0 : (Baseline - PlotTop) * count / max;
+    }
+
+    /// <summary>A bar anchored to the baseline with only its top corners rounded.</summary>
+    private static string BarPath(double x, double height)
+    {
+        var r = Math.Min(Radius, height);
+        var top = Baseline - height;
+        return FormattableString.Invariant(
+            $"M{x},{Baseline} V{top + r} Q{x},{top} {x + r},{top} H{x + BarWidth - r} Q{x + BarWidth},{top} {x + BarWidth},{top + r} V{Baseline} Z");
+    }
+}

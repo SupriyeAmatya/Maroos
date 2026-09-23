@@ -7,14 +7,13 @@ namespace Maroos.Web.Services;
 
 public sealed record DeckSummary(Guid Id, string Name, string Format, bool IsPublic, int MainCount, int SideCount, DateTime UpdatedAt);
 
-/// <summary>A deck line plus its Scryfall card data (null if Scryfall no longer knows the card).</summary>
-public sealed record DeckEntry(DeckCard Line, ScryfallCard? Card)
-{
-    public string PrimaryType => CardTypes.PrimaryType(Card?.TypeLine);
-}
-
 public sealed record DeckView(Deck Deck, bool IsOwner, IReadOnlyList<DeckEntry> Entries)
 {
+    public DeckStats Stats { get; } = DeckStats.Compute(Entries);
+
+    /// <summary>Problems with the deck in its format; empty when it's legal.</summary>
+    public IReadOnlyList<DeckIssue> Issues { get; } = DeckRules.Check(Deck.Format, Entries);
+
     public int Count(Board board) => Entries.Where(e => e.Line.Board == board).Sum(e => e.Line.Quantity);
 
     public string Export(bool includePrintings = false) => DeckListWriter.Write(Entries.Select(e => e.Line), includePrintings);

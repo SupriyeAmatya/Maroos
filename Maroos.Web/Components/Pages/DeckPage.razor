@@ -28,6 +28,19 @@ else
             <h1 class="mb-0 me-2">@deck.Name</h1>
             <span class="badge text-bg-primary">@DeckFormats.DisplayName(deck.Format)</span>
             <span class="badge @(deck.IsPublic ? "text-bg-success" : "text-bg-secondary")">@(deck.IsPublic ? "Public" : "Private")</span>
+            @if (view.Entries.Count > 0)
+            {
+                @if (view.Issues.Count == 0)
+                {
+                    <span class="badge text-bg-success deck-legal-badge">✓ Legal in @DeckFormats.DisplayName(deck.Format)</span>
+                }
+                else
+                {
+                    <a class="badge text-bg-danger deck-legal-badge text-decoration-none" href="@($"decks/{deck.Id}#deck-issues")">
+                        ⚠ @view.Issues.Count issue@(view.Issues.Count == 1 ? "" : "s")
+                    </a>
+                }
+            }
         </div>
         <p class="text-muted mb-0 mt-1">
             @if (view.Count(Board.Commander) > 0)
@@ -38,6 +51,10 @@ else
             @if (view.Count(Board.Side) > 0)
             {
                 <span> · Sideboard @view.Count(Board.Side)</span>
+            }
+            @if (view.Entries.Count > 0)
+            {
+                <span> · @Money.FormatUsd(view.Stats.TotalPriceCents)</span>
             }
         </p>
     </header>
@@ -144,6 +161,21 @@ else
         </div>
     }
 
+    @if (view.Issues.Count > 0 && view.Entries.Count > 0)
+    {
+        <section id="deck-issues" class="alert alert-danger deck-issues" aria-labelledby="deck-issues-heading">
+            <h2 id="deck-issues-heading" class="h6 alert-heading mb-2">
+                ⚠ Not legal in @DeckFormats.DisplayName(deck.Format) yet
+            </h2>
+            <ul class="mb-0">
+                @foreach (var issue in view.Issues)
+                {
+                    <li data-issue="@issue.Kind">@issue.Message</li>
+                }
+            </ul>
+        </section>
+    }
+
     <div class="deck-status mb-3" role="status" aria-live="polite">
         @if (status is not null)
         {
@@ -196,6 +228,8 @@ else
                 }
             </aside>
         </div>
+
+        <DeckStatsPanel Stats="view.Stats" />
     }
 }
 
@@ -245,6 +279,10 @@ else
 
     private IEnumerable<DeckEntry> EntriesOn(Board board) => view!.Entries.Where(e => e.Line.Board == board);
 
+    /// <summary>The first card-level issue for this row's card, if any.</summary>
+    private DeckIssue? IssueFor(DeckEntry entry) =>
+        view!.Issues.FirstOrDefault(i => string.Equals(i.CardName, entry.Line.CardName, StringComparison.OrdinalIgnoreCase));
+
     private RenderFragment Group(string heading, Board board, IEnumerable<DeckEntry> entries) => __builder =>
     {
         var list = entries.ToList();
@@ -253,10 +291,15 @@ else
             <ul class="list-unstyled deck-group-list">
                 @foreach (var entry in list)
                 {
-                    <li class="deck-row" @key="(entry.Line.ScryfallId, entry.Line.Board)" @onmouseenter="() => preview = entry">
+                    var issue = IssueFor(entry);
+                    <li class="deck-row @(issue is null ? "" : "deck-row-issue")" @key="(entry.Line.ScryfallId, entry.Line.Board)" @onmouseenter="() => preview = entry">
                         <span class="deck-row-qty">@entry.Line.Quantity</span>
                         <a class="deck-row-name" href="card/@entry.Line.ScryfallId">@entry.Line.CardName</a>
-                        <span class="deck-row-cost"><ManaText Text="@ManaCost(entry)" /></span>
+                        @if (issue is not null)
+                        {
+                            <span class="badge text-bg-danger deck-row-flag" title="@issue.Message">@issue.Label</span>
+                        }
+                        <span class="deck-row-cost"><ManaText Text="@entry.Card?.FrontManaCost" /></span>
                         @if (view!.IsOwner)
                         {
                             <span class="deck-row-actions">
@@ -273,10 +316,6 @@ else
             </ul>
         </section>
     };
-
-    /// <summary>Double-faced cards keep their mana cost on the front face.</summary>
-    private static string? ManaCost(DeckEntry entry) =>
-        !string.IsNullOrEmpty(entry.Card?.ManaCost) ? entry.Card.ManaCost : entry.Card?.CardFaces?.FirstOrDefault()?.ManaCost;
 
     private void Toggle(Panel target)
     {

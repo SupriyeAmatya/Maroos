@@ -21,6 +21,15 @@ public sealed record ScryfallCard(
 {
     /// <summary>Front-face image; double-faced cards keep their images on <see cref="CardFaces"/> instead.</summary>
     public ScryfallImageUris? FrontImage => ImageUris ?? CardFaces?.FirstOrDefault()?.ImageUris;
+
+    /// <summary>Mana cost to show and count: double-faced cards keep theirs on the front face.</summary>
+    public string? FrontManaCost => !string.IsNullOrEmpty(ManaCost) ? ManaCost : CardFaces?.FirstOrDefault()?.ManaCost;
+
+    /// <summary>The card's colors; double-faced cards keep theirs on the front face.</summary>
+    public IReadOnlyList<string> FrontColors => Colors ?? CardFaces?.FirstOrDefault()?.Colors ?? [];
+
+    /// <summary>Price used for deck totals: non-foil USD, or foil USD for foil-only printings.</summary>
+    public long? DeckPriceCents => Prices.UsdCents ?? Prices.UsdFoilCents;
 }
 
 /// <summary>One face of a multi-faced card (transform, modal DFC, split, adventure).</summary>
@@ -29,7 +38,8 @@ public sealed record ScryfallCardFace(
     string? ManaCost,
     string? TypeLine,
     string? OracleText,
-    ScryfallImageUris? ImageUris);
+    ScryfallImageUris? ImageUris,
+    IReadOnlyList<string>? Colors = null);
 
 public sealed record ScryfallImageUris(string? Small, string? Normal, string? Large, string? ArtCrop);
 
