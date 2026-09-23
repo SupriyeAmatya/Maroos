@@ -24,6 +24,7 @@ public sealed class DeckPageTests : BunitContext
         _decks = new DeckService(_db, cards, TimeProvider.System);
         Services.AddSingleton(cards);
         Services.AddSingleton(_decks);
+        Services.AddSingleton(new WatchService(_db, TimeProvider.System));
         JSInterop.SetupVoid("navigator.clipboard.writeText", _ => true).SetVoidResult();
 
         _alice = AddUser("alice@example.com");

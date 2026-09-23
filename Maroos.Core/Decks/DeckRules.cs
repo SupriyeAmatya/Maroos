@@ -12,6 +12,7 @@ public enum DeckIssueKind
     Restricted,
     TooManyCopies,
     UnknownCard,
+    ColorIdentity,
 }
 
 /// <param name="CardName">The card the issue is about, or null for deck-level issues (size, commander).</param>
@@ -25,6 +26,7 @@ public sealed record DeckIssue(DeckIssueKind Kind, string Message, string? CardN
         DeckIssueKind.Restricted => "Restricted",
         DeckIssueKind.TooManyCopies => "Too many",
         DeckIssueKind.UnknownCard => "Unknown",
+        DeckIssueKind.ColorIdentity => "Off-color",
         _ => "Issue",
     };
 }
@@ -78,6 +80,13 @@ public static partial class DeckRules
         else if (rules.UsesCommander && commanders > 2)
             issues.Add(new(DeckIssueKind.Commander, $"The commander zone has {Cards(commanders)}; {formatName} allows one, or two with partner."));
 
+        // Commander decks can only use cards whose color identity fits inside the commanders' combined identity.
+        var commanderIdentity = cards
+            .Where(e => e.Line.Board == Board.Commander && e.Card is not null)
+            .SelectMany(e => e.Card!.ColorIdentity ?? [])
+            .ToHashSet();
+        var checkIdentity = rules.UsesCommander && commanders > 0 && cards.Where(e => e.Line.Board == Board.Commander).All(e => e.Card is not null);
+
         // Copies and legality are per card name: different printings of a card are the same card.
         foreach (var group in cards.GroupBy(e => e.Line.CardName, StringComparer.OrdinalIgnoreCase).OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase))
         {
@@ -98,6 +107,11 @@ public static partial class DeckRules
                 issues.Add(new(DeckIssueKind.NotLegal, $"{name} isn't legal in {formatName}.", name));
             else if (legality == "restricted" && copies > 1)
                 issues.Add(new(DeckIssueKind.Restricted, $"{Copies(copies)} of {name}; it's restricted to 1 in {formatName}.", name));
+
+            if (checkIdentity && group.Any(e => e.Line.Board == Board.Main)
+                && (card.ColorIdentity ?? []).Where(c => !commanderIdentity.Contains(c)).ToList() is { Count: > 0 } outside)
+                issues.Add(new(DeckIssueKind.ColorIdentity,
+                    $"{name} is {ColorList(outside)}, outside the commander's colors ({ColorList(commanderIdentity)}).", name));
 
             var allowed = AllowedCopies(card.TypeLine, card.OracleText ?? card.CardFaces?.FirstOrDefault()?.OracleText, rules.MaxCopies);
             if (copies > allowed && legality != "restricted")
@@ -129,6 +143,14 @@ public static partial class DeckRules
         "seven" => 7, "eight" => 8, "nine" => 9, "ten" => 10,
         _ => int.TryParse(word, out var n) ? n : null,
     };
+
+    private static readonly string[] Wubrg = ["W", "U", "B", "R", "G"];
+
+    private static string ColorList(IEnumerable<string> colors)
+    {
+        var names = Wubrg.Where(colors.Contains).Select(DeckStats.ColorName).ToList();
+        return names.Count == 0 ? "colorless" : string.Join("/", names).ToLowerInvariant();
+    }
 
     private static string Cards(int count) => count == 1 ? "1 card" : $"{count} cards";
 

@@ -17,7 +17,8 @@ public sealed record ScryfallCard(
     ScryfallImageUris? ImageUris,
     ScryfallPrices Prices,
     IReadOnlyDictionary<string, string> Legalities,
-    IReadOnlyList<ScryfallCardFace>? CardFaces)
+    IReadOnlyList<ScryfallCardFace>? CardFaces,
+    IReadOnlyList<string>? ColorIdentity = null)
 {
     /// <summary>Front-face image; double-faced cards keep their images on <see cref="CardFaces"/> instead.</summary>
     public ScryfallImageUris? FrontImage => ImageUris ?? CardFaces?.FirstOrDefault()?.ImageUris;

@@ -70,13 +70,14 @@ public sealed class CardPagesTests : BunitContext
 
         input.Input("lightning b");
         page.WaitForAssertion(() => Assert.Equal(5, page.FindAll("#card-suggestions li").Count), TimeSpan.FromSeconds(2));
-        Assert.Equal("true", input.GetAttribute("aria-expanded"));
+        Assert.Equal("true", page.Find("input[type=search]").GetAttribute("aria-expanded"));
 
-        input.KeyDown(new KeyboardEventArgs { Key = "ArrowDown" });
-        input.KeyDown(new KeyboardEventArgs { Key = "ArrowDown" });
-        var active = page.Find("#card-suggestions li.active");
-        Assert.Equal("Lightning Bolt", active.TextContent.Trim());
-        Assert.Equal(active.Id, page.Find("input[type=search]").GetAttribute("aria-activedescendant"));
+        // Find the input fresh for each key: every render gives its event handlers new ids.
+        page.Find("input[type=search]").KeyDown(new KeyboardEventArgs { Key = "ArrowDown" });
+        page.WaitForAssertion(() => Assert.Equal("Lightning Blow", page.Find("#card-suggestions li.active").TextContent.Trim()));
+        page.Find("input[type=search]").KeyDown(new KeyboardEventArgs { Key = "ArrowDown" });
+        page.WaitForAssertion(() => Assert.Equal("Lightning Bolt", page.Find("#card-suggestions li.active").TextContent.Trim()));
+        Assert.Equal(page.Find("#card-suggestions li.active").Id, page.Find("input[type=search]").GetAttribute("aria-activedescendant"));
 
         page.Find("input[type=search]").KeyDown(new KeyboardEventArgs { Key = "Enter" });
 

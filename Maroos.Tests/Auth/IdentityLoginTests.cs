@@ -7,6 +7,8 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 
 namespace Maroos.Tests.Auth;
 
@@ -25,6 +27,8 @@ public class MaroosWebFactory : WebApplicationFactory<Program>
         {
             services.AddSingleton(new ScryfallThrottle(TimeSpan.Zero));
             services.AddHttpClient<ScryfallClient>().ConfigurePrimaryHttpMessageHandler(() => FakeScryfallHandler.WithFixtures());
+            // Tests close auctions themselves; the minute timer would only race the test database's creation.
+            services.RemoveAll<IHostedService>();
         });
     }
 

@@ -62,6 +62,42 @@ public class DeckRulesTests
     }
 
     [Fact]
+    public void Commander_cards_must_fit_the_commanders_color_identity()
+    {
+        var krenko = Entry(1, Card("Krenko, Mob Boss", "Legendary Creature — Goblin Warrior", colors: ["R"]), Board.Commander);
+
+        var issues = DeckRules.Check("commander",
+        [
+            krenko,
+            Entry(1, Card("Lightning Bolt", colors: ["R"])),
+            Entry(1, Card("Counterspell", manaCost: "{U}{U}", colors: ["U"])),
+            Entry(1, Card("Sol Ring", "Artifact", colors: [])),
+            // Colorless on the face but with a red activated ability: identity decides, not colors.
+            Entry(1, Card("Rakdos Keyrune", "Artifact", colors: [], colorIdentity: ["B", "R"])),
+            Entry(95, Land()),
+        ]);
+
+        Assert.Equal(
+        [
+            (DeckIssueKind.ColorIdentity, "Counterspell is blue, outside the commander's colors (red).", "Counterspell"),
+            (DeckIssueKind.ColorIdentity, "Rakdos Keyrune is black, outside the commander's colors (red).", "Rakdos Keyrune"),
+        ], issues.Select(i => (i.Kind, i.Message, i.CardName)));
+    }
+
+    [Fact]
+    public void Partner_commanders_combine_their_colors_and_constructed_decks_skip_the_check()
+    {
+        var partners = new[]
+        {
+            Entry(1, Card("Tymna the Weaver", "Legendary Creature — Human Cleric", colors: ["W", "B"]), Board.Commander),
+            Entry(1, Card("Thrasios, Triton Hero", "Legendary Creature — Merfolk Wizard", colors: ["G", "U"]), Board.Commander),
+        };
+
+        Assert.Empty(DeckRules.Check("commander", [.. partners, Entry(1, Card("Counterspell", colors: ["U"])), Entry(97, Land())]));
+        Assert.Empty(DeckRules.Check("modern", SixtyCards(Entry(4, Card("Counterspell", colors: ["U"])))));
+    }
+
+    [Fact]
     public void Commander_decks_need_a_commander()
     {
         var issue = Assert.Single(DeckRules.Check("commander", [Entry(100, Land())]));

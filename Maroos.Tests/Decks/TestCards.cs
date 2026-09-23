@@ -15,12 +15,14 @@ public static class TestCards
         string? usd = "1.00",
         string? usdFoil = null,
         string? oracleText = null,
-        Dictionary<string, string>? legalities = null) =>
+        Dictionary<string, string>? legalities = null,
+        string[]? colorIdentity = null) =>
         new(
             Guid.NewGuid(), name, manaCost, cmc, typeLine, oracleText, colors ?? ["R"], "tst", "Test Set", "1",
             null, new ScryfallPrices(usd, usdFoil, null, null),
             legalities ?? new() { ["modern"] = "legal", ["legacy"] = "legal", ["vintage"] = "legal", ["commander"] = "legal" },
-            null);
+            null,
+            colorIdentity ?? colors ?? ["R"]);
 
     public static DeckEntry Entry(int quantity, ScryfallCard? card, Board board = Board.Main, string? name = null) =>
         new(new DeckCard { ScryfallId = card?.Id ?? Guid.NewGuid(), CardName = name ?? card!.Name, Quantity = quantity, Board = board }, card);

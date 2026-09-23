@@ -59,6 +59,11 @@ builder.Services.AddHttpClient<ScryfallClient>(client =>
 builder.Services.AddScoped<CardService>();
 builder.Services.AddScoped<DeckService>();
 builder.Services.AddScoped<AuctionService>();
+builder.Services.AddScoped<BiddingService>();
+builder.Services.AddScoped<WatchService>();
+builder.Services.AddSignalR();
+builder.Services.AddSingleton<AuctionEvents>();
+builder.Services.AddHostedService<AuctionCloser>();
 
 // Auction photos: saved re-encoded under Uploads:Path and served at Uploads:RequestPath.
 var photoOptions = builder.Configuration.GetSection("Uploads").Get<PhotoStorageOptions>() ?? new PhotoStorageOptions();
@@ -117,6 +122,8 @@ app.UseStaticFiles(new StaticFileOptions
 });
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
+
+app.MapHub<AuctionHub>(AuctionHub.Path);
 
 // Add additional endpoints required by the Identity /Account Razor components.
 app.MapAdditionalIdentityEndpoints();

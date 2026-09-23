@@ -534,3 +534,38 @@ h1:focus {
 .auction-filter-submit {
     flex: 0 0 auto;
 }
+
+/* Bidding */
+.auction-countdown {
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+}
+
+.bid-input {
+    max-width: 22rem;
+}
+
+.bid-history {
+    max-width: 32rem;
+}
+
+.bid-history-row {
+    display: grid;
+    grid-template-columns: 6rem 1fr auto;
+    gap: 0.75rem;
+    align-items: baseline;
+    padding: 0.25rem 0;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.bid-history-row:first-child {
+    font-weight: 600;
+}
+
+.bid-history-amount {
+    font-variant-numeric: tabular-nums;
+}
+
+.watch-button {
+    white-space: nowrap;
+}

@@ -16,6 +16,7 @@ public enum AuctionSort
 public sealed record AuctionFilter(string? CardName = null, string? SetCode = null, long? MaxCents = null, AuctionSort Sort = AuctionSort.EndingSoon);
 
 /// <param name="ImageUrl">The seller's photo if there is one, otherwise Scryfall's image of the printing.</param>
+/// <param name="CurrentCents">The high bid, or the starting price when nobody has bid.</param>
 public sealed record AuctionSummary(
     Guid Id,
     Guid ScryfallId,
@@ -26,21 +27,44 @@ public sealed record AuctionSummary(
     bool IsFoil,
     string? ImageUrl,
     long CurrentCents,
+    int BidCount,
     DateTime EndsAtUtc);
 
 public sealed record AuctionSetOption(string Code, string Name, int Count);
 
-public sealed record AuctionView(Auction Auction, string SellerName, bool IsSeller, ScryfallCard? Card, long CurrentCents, bool IsOpen)
+/// <summary>A seller's own listing, any status, for their profile.</summary>
+public sealed record SellerListing(Guid Id, string CardName, string SetName, AuctionStatus Status, bool IsOpen, long CurrentCents, int BidCount, DateTime EndsAtUtc, string? WinnerName);
+
+/// <param name="HighBidderId">Who holds the high bid, if anyone.</param>
+/// <param name="WinnerName">The high bidder once the auction is over (null while open, cancelled, or with no bids).</param>
+/// <param name="ContactEmail">After a won auction: the seller's email for the winner, the winner's email for the seller; null for everyone else.</param>
+public sealed record AuctionView(
+    Auction Auction,
+    string SellerName,
+    bool IsSeller,
+    ScryfallCard? Card,
+    long CurrentCents,
+    int BidCount,
+    string? HighBidderId,
+    bool IsOpen,
+    string? WinnerName,
+    bool ViewerIsWinner,
+    string? ContactEmail)
 {
-    /// <summary>Only the seller can cancel, and only while the auction is open.</summary>
-    public bool CanCancel => IsSeller && IsOpen;
+    /// <summary>Only the seller can cancel, only while open, and only before anyone bids.</summary>
+    public bool CanCancel => IsSeller && IsOpen && BidCount == 0;
+
+    public long MinimumNextBid => BidCount == 0 ? Auction.StartCents : CurrentCents + Auction.IncrementCents;
 }
 
 /// <summary>Thrown when someone other than the seller tries to change a listing.</summary>
 public sealed class AuctionAccessException() : Exception("Only the seller can change this listing.");
 
-/// <summary>Creates, lists, shows and cancels auction listings. Every change checks that the caller is the seller.</summary>
-public sealed class AuctionService(IDbContextFactory<ApplicationDbContext> dbFactory, CardService cards, TimeProvider clock)
+/// <summary>
+/// Creates, lists, shows, cancels and closes auction listings. Every change checks that the caller is the seller.
+/// Bids themselves go through <see cref="BiddingService"/>.
+/// </summary>
+public sealed class AuctionService(IDbContextFactory<ApplicationDbContext> dbFactory, CardService cards, AuctionEvents events, TimeProvider clock)
 {
     public async Task<Auction> CreateAsync(string sellerId, NewAuction request, CancellationToken ct = default)
     {
@@ -81,37 +105,44 @@ public sealed class AuctionService(IDbContextFactory<ApplicationDbContext> dbFac
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         var now = clock.GetUtcNow().UtcDateTime;
-        var query = OpenAuctions(db, now);
+        var auctions = OpenAuctions(db, now);
 
         if (!string.IsNullOrWhiteSpace(filter.CardName))
         {
             var term = filter.CardName.Trim().ToLower();
-            query = query.Where(a => a.CardName.ToLower().Contains(term));
+            auctions = auctions.Where(a => a.CardName.ToLower().Contains(term));
         }
         if (!string.IsNullOrWhiteSpace(filter.SetCode))
         {
             var set = filter.SetCode.Trim().ToLowerInvariant();
-            query = query.Where(a => a.SetCode == set);
+            auctions = auctions.Where(a => a.SetCode == set);
         }
-        // Until bidding exists (phase 6) the current price is the starting price.
-        if (filter.MaxCents is { } max)
-            query = query.Where(a => a.StartCents <= max);
 
-        query = filter.Sort switch
+        var priced = auctions.Select(a => new
         {
-            AuctionSort.Newest => query.OrderByDescending(a => a.CreatedAtUtc),
-            AuctionSort.PriceLow => query.OrderBy(a => a.StartCents).ThenBy(a => a.EndsAtUtc),
-            AuctionSort.PriceHigh => query.OrderByDescending(a => a.StartCents).ThenBy(a => a.EndsAtUtc),
-            _ => query.OrderBy(a => a.EndsAtUtc),
+            Auction = a,
+            Current = db.Bids.Where(b => b.AuctionId == a.Id).Max(b => (long?)b.AmountCents) ?? a.StartCents,
+            Bids = db.Bids.Count(b => b.AuctionId == a.Id),
+        });
+
+        if (filter.MaxCents is { } max)
+            priced = priced.Where(p => p.Current <= max);
+
+        priced = filter.Sort switch
+        {
+            AuctionSort.Newest => priced.OrderByDescending(p => p.Auction.CreatedAtUtc),
+            AuctionSort.PriceLow => priced.OrderBy(p => p.Current).ThenBy(p => p.Auction.EndsAtUtc),
+            AuctionSort.PriceHigh => priced.OrderByDescending(p => p.Current).ThenBy(p => p.Auction.EndsAtUtc),
+            _ => priced.OrderBy(p => p.Auction.EndsAtUtc),
         };
 
-        var auctions = await query.AsNoTracking().Take(200).ToListAsync(ct);
-        var cardData = await cards.GetCardsAsync(auctions.Where(a => a.PhotoPath is null).Select(a => a.ScryfallId), ct);
+        var rows = await priced.AsNoTracking().Take(200).ToListAsync(ct);
+        var cardData = await cards.GetCardsAsync(rows.Where(r => r.Auction.PhotoPath is null).Select(r => r.Auction.ScryfallId), ct);
 
-        return auctions.Select(a => new AuctionSummary(
-                a.Id, a.ScryfallId, a.CardName, a.SetCode, a.SetName, a.Condition, a.IsFoil,
-                a.PhotoPath ?? cardData.GetValueOrDefault(a.ScryfallId)?.FrontImage?.Normal,
-                a.StartCents, a.EndsAtUtc))
+        return rows.Select(r => new AuctionSummary(
+                r.Auction.Id, r.Auction.ScryfallId, r.Auction.CardName, r.Auction.SetCode, r.Auction.SetName, r.Auction.Condition, r.Auction.IsFoil,
+                r.Auction.PhotoPath ?? cardData.GetValueOrDefault(r.Auction.ScryfallId)?.FrontImage?.Normal,
+                r.Current, r.Bids, r.Auction.EndsAtUtc))
             .ToList();
     }
 
@@ -126,31 +157,91 @@ public sealed class AuctionService(IDbContextFactory<ApplicationDbContext> dbFac
         return sets.OrderBy(s => s.Name, StringComparer.OrdinalIgnoreCase).ToList();
     }
 
-    /// <summary>Any auction, open or not, with its seller's public name. Null if it doesn't exist.</summary>
+    /// <summary>Every listing a seller has made, newest first.</summary>
+    public async Task<IReadOnlyList<SellerListing>> ListForSellerAsync(string sellerId, CancellationToken ct = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var now = clock.GetUtcNow().UtcDateTime;
+        var rows = await db.Auctions
+            .Where(a => a.SellerId == sellerId)
+            .OrderByDescending(a => a.CreatedAtUtc)
+            .Select(a => new
+            {
+                Auction = a,
+                Current = db.Bids.Where(b => b.AuctionId == a.Id).Max(b => (long?)b.AmountCents) ?? a.StartCents,
+                Bids = db.Bids.Count(b => b.AuctionId == a.Id),
+                TopBidderName = db.Bids.Where(b => b.AuctionId == a.Id)
+                    .OrderByDescending(b => b.AmountCents).ThenBy(b => b.CreatedAtUtc)
+                    .Join(db.Users, b => b.BidderId, u => u.Id, (b, u) => u.DisplayName)
+                    .FirstOrDefault(),
+            })
+            .AsNoTracking()
+            .ToListAsync(ct);
+
+        return rows.Select(r =>
+        {
+            var isOpen = r.Auction.IsOpenAt(now);
+            var won = !isOpen && r.Auction.Status != AuctionStatus.Cancelled && r.Bids > 0;
+            return new SellerListing(r.Auction.Id, r.Auction.CardName, r.Auction.SetName, r.Auction.Status, isOpen,
+                r.Current, r.Bids, r.Auction.EndsAtUtc, won ? ApplicationUser.PublicName(r.TopBidderName) : null);
+        }).ToList();
+    }
+
+    /// <summary>Any auction, open or not, with bids, winner and seller's public name. Null if it doesn't exist.</summary>
     public async Task<AuctionView?> GetAsync(Guid auctionId, string? viewerId, CancellationToken ct = default)
     {
         Auction? auction;
-        string? sellerName;
+        ApplicationUser? seller;
+        ApplicationUser? highBidder = null;
+        long? highBid = null;
+        int bidCount;
         await using (var db = await dbFactory.CreateDbContextAsync(ct))
         {
             auction = await db.Auctions.AsNoTracking().FirstOrDefaultAsync(a => a.Id == auctionId, ct);
             if (auction is null)
                 return null;
-            sellerName = await db.Users.Where(u => u.Id == auction.SellerId).Select(u => u.DisplayName).FirstOrDefaultAsync(ct);
+
+            seller = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == auction.SellerId, ct);
+            bidCount = await db.Bids.CountAsync(b => b.AuctionId == auctionId, ct);
+            var top = await db.Bids.Where(b => b.AuctionId == auctionId)
+                .OrderByDescending(b => b.AmountCents).ThenBy(b => b.CreatedAtUtc)
+                .FirstOrDefaultAsync(ct);
+            if (top is not null)
+            {
+                highBid = top.AmountCents;
+                highBidder = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == top.BidderId, ct);
+            }
         }
 
         var card = await cards.GetCardAsync(auction.ScryfallId, ct);
+        var isOpen = auction.IsOpenAt(clock.GetUtcNow().UtcDateTime);
         var isSeller = viewerId is not null && auction.SellerId == viewerId;
+
+        // The winner is known the moment the auction ends, even before the closer marks it Ended.
+        var hasWinner = !isOpen && auction.Status != AuctionStatus.Cancelled && highBidder is not null;
+        var viewerIsWinner = hasWinner && highBidder!.Id == viewerId;
+
+        // "Winner contacts seller": only the two people in the sale see each other's email.
+        var contact = !hasWinner ? null
+            : viewerIsWinner ? seller?.Email
+            : isSeller ? highBidder!.Email
+            : null;
+
         return new AuctionView(
             auction,
-            ApplicationUser.PublicName(sellerName),
+            ApplicationUser.PublicName(seller?.DisplayName),
             isSeller,
             card,
-            auction.StartCents,
-            auction.IsOpenAt(clock.GetUtcNow().UtcDateTime));
+            highBid ?? auction.StartCents,
+            bidCount,
+            highBidder?.Id,
+            isOpen,
+            hasWinner ? ApplicationUser.PublicName(highBidder!.DisplayName) : null,
+            viewerIsWinner,
+            contact);
     }
 
-    /// <summary>Cancels an open auction. Only its seller can.</summary>
+    /// <summary>Cancels an open auction nobody has bid on. Only its seller can.</summary>
     public async Task CancelAsync(Guid auctionId, string sellerId, CancellationToken ct = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
@@ -160,9 +251,43 @@ public sealed class AuctionService(IDbContextFactory<ApplicationDbContext> dbFac
             throw new AuctionAccessException();
         if (!auction.IsOpenAt(clock.GetUtcNow().UtcDateTime))
             throw new AuctionValidationException(["This auction has already ended."]);
+        if (await db.Bids.AnyAsync(b => b.AuctionId == auctionId, ct))
+            throw new AuctionValidationException(["Someone has already bid, so this auction can't be cancelled."]);
 
         auction.Status = AuctionStatus.Cancelled;
         await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Marks every active auction past its end time as Ended and records the high bidder as the winner.
+    /// Returns how many were closed. <see cref="AuctionCloser"/> runs this every minute.
+    /// </summary>
+    public async Task<int> CloseExpiredAsync(CancellationToken ct = default)
+    {
+        var ended = new List<AuctionEnded>();
+        await using (var db = await dbFactory.CreateDbContextAsync(ct))
+        {
+            var now = clock.GetUtcNow().UtcDateTime;
+            var expired = await db.Auctions.Where(a => a.Status == AuctionStatus.Active && a.EndsAtUtc <= now).ToListAsync(ct);
+
+            foreach (var auction in expired)
+            {
+                var top = await db.Bids.Where(b => b.AuctionId == auction.Id)
+                    .OrderByDescending(b => b.AmountCents).ThenBy(b => b.CreatedAtUtc)
+                    .Join(db.Users, b => b.BidderId, u => u.Id, (b, u) => new { b.BidderId, b.AmountCents, u.DisplayName })
+                    .FirstOrDefaultAsync(ct);
+
+                auction.Status = AuctionStatus.Ended;
+                auction.WinnerId = top?.BidderId;
+                ended.Add(new AuctionEnded(auction.Id, top is null ? null : ApplicationUser.PublicName(top.DisplayName), top?.AmountCents));
+            }
+
+            await db.SaveChangesAsync(ct);
+        }
+
+        foreach (var auctionEnded in ended)
+            await events.PublishAsync(auctionEnded);
+        return ended.Count;
     }
 
     private static IQueryable<Auction> OpenAuctions(ApplicationDbContext db, DateTime now) =>

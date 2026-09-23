@@ -1,8 +1,12 @@
 @page "/auctions/{Id:guid}"
 @rendermode InteractiveServer
+@implements IAsyncDisposable
 
 @inject AuctionService AuctionService
+@inject BiddingService Bidding
+@inject AuctionEvents Events
 @inject TimeProvider Clock
+@inject ILogger<AuctionPage> Logger
 
 @if (view is null)
 {
@@ -46,33 +50,38 @@ else
         <div class="auction-detail-info">
             <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
                 <h1 class="mb-0 me-1"><a href="card/@auction.ScryfallId" class="text-reset text-decoration-none">@auction.CardName</a></h1>
-                <span class="badge @StatusBadgeClass">@StatusLabel</span>
+                <span class="badge auction-status @StatusBadgeClass">@StatusLabel</span>
+                <WatchButton Target="WatchTarget.Auction" TargetId="auction.Id" />
             </div>
             <p class="text-muted mb-3">
                 @auction.SetName (@auction.SetCode.ToUpperInvariant()) #@auction.CollectorNumber
             </p>
 
             <dl class="auction-facts">
-                <dt>Current price</dt>
+                <dt>@(view.BidCount == 0 ? "Starting price" : view.IsOpen ? "High bid" : "Final price")</dt>
                 <dd class="auction-price">@Money.FormatUsd(view.CurrentCents)</dd>
+
+                <dt>Bids</dt>
+                <dd class="auction-bid-count">@view.BidCount</dd>
+
+                <dt>@(view.IsOpen ? "Time left" : "Ended")</dt>
+                <dd>
+                    @if (view.IsOpen)
+                    {
+                        <span class="auction-countdown" role="timer" aria-live="off">@AuctionRules.Countdown(now, auction.EndsAtUtc)</span>
+                        <span class="text-muted"> · ends <time datetime="@auction.EndsAtUtc.ToString("o")">@auction.EndsAtUtc.ToString("MMM d, HH:mm") UTC</time></span>
+                    }
+                    else
+                    {
+                        <time datetime="@auction.EndsAtUtc.ToString("o")">@auction.EndsAtUtc.ToString("MMM d, yyyy HH:mm") UTC</time>
+                    }
+                </dd>
 
                 <dt>Condition</dt>
                 <dd>@AuctionRules.ConditionLabel(auction.Condition)@(auction.IsFoil ? ", foil" : "")</dd>
 
-                <dt>Starting price</dt>
-                <dd>@Money.FormatUsd(auction.StartCents)</dd>
-
                 <dt>Bid increment</dt>
                 <dd>@Money.FormatUsd(auction.IncrementCents)</dd>
-
-                <dt>@(view.IsOpen ? "Ends" : "Ended")</dt>
-                <dd>
-                    <time datetime="@auction.EndsAtUtc.ToString("o")">@auction.EndsAtUtc.ToString("MMM d, yyyy HH:mm") UTC</time>
-                    @if (view.IsOpen)
-                    {
-                        <span class="text-muted"> · @AuctionRules.TimeLeft(Clock.GetUtcNow().UtcDateTime, auction.EndsAtUtc) left</span>
-                    }
-                </dd>
 
                 <dt>Seller</dt>
                 <dd>@view.SellerName@(view.IsSeller ? " (you)" : "")</dd>
@@ -83,16 +92,72 @@ else
                 <p class="small text-muted">Scryfall lists this printing at @Money.FormatUsd(market).</p>
             }
 
-            <div role="status" aria-live="polite">
-                @if (message is not null)
+            <section class="auction-action card card-body mb-3" aria-label="Bidding">
+                @if (auction.Status == AuctionStatus.Cancelled)
                 {
-                    <div class="alert @(messageIsError ? "alert-warning" : "alert-success") py-2">@message</div>
+                    <p class="mb-0">The seller cancelled this auction.</p>
                 }
-            </div>
+                else if (!view.IsOpen)
+                {
+                    @if (view.WinnerName is null)
+                    {
+                        <p class="mb-0">This auction ended with no bids.</p>
+                    }
+                    else
+                    {
+                        <p class="mb-0 auction-result">
+                            Won by <strong>@view.WinnerName</strong> for <strong>@Money.FormatUsd(view.CurrentCents)</strong>.
+                        </p>
+                    }
+                    @if (view.ContactEmail is { } email)
+                    {
+                        <div class="alert alert-success mt-3 mb-0 auction-contact">
+                            @if (view.ViewerIsWinner)
+                            {
+                                <text>You won! Email the seller at </text><a href="mailto:@email">@email</a><text> to arrange payment and shipping.</text>
+                            }
+                            else
+                            {
+                                <text>You sold this card. Contact the winner, @view.WinnerName, at </text><a href="mailto:@email">@email</a><text>.</text>
+                            }
+                            <div class="small mt-1">Only the two of you can see these emails. Maroos doesn't handle payment.</div>
+                        </div>
+                    }
+                }
+                else if (userId is null)
+                {
+                    <p class="mb-0"><a href="@($"Account/Login?ReturnUrl={Uri.EscapeDataString($"/auctions/{Id}")}")">Log in</a> to bid.</p>
+                }
+                else if (view.IsSeller)
+                {
+                    <p class="mb-0">This is your listing, so you can't bid on it.</p>
+                }
+                else if (view.HighBidderId == userId)
+                {
+                    <p class="mb-0 auction-leading">You're the highest bidder. We'll show it here if someone outbids you.</p>
+                }
+                else
+                {
+                    <label for="bid-amount" class="form-label">Your bid <span class="text-muted">(at least @Money.FormatUsd(view.MinimumNextBid))</span></label>
+                    <div class="input-group bid-input">
+                        <span class="input-group-text">$</span>
+                        <input id="bid-amount" class="form-control" inputmode="decimal" @bind="bidText" disabled="@busy" />
+                        <button type="button" class="btn btn-primary" disabled="@busy" @onclick="PlaceBidAsync">Place bid</button>
+                    </div>
+                    <div class="form-text">Bids are binding: if you win, you agree to buy the card at your bid.</div>
+                }
+
+                <div role="status" aria-live="polite">
+                    @if (message is not null)
+                    {
+                        <div class="alert @(messageIsError ? "alert-warning" : "alert-success") py-2 mt-3 mb-0 auction-message">@message</div>
+                    }
+                </div>
+            </section>
 
             @if (view.CanCancel)
             {
-                <div class="d-flex flex-wrap align-items-center gap-2 mt-3">
+                <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
                     @if (confirmingCancel)
                     {
                         <span>Cancel this auction? It can't be reopened.</span>
@@ -105,6 +170,31 @@ else
                     }
                 </div>
             }
+            else if (view.IsSeller && view.IsOpen)
+            {
+                <p class="small text-muted">Auctions with bids can't be cancelled.</p>
+            }
+
+            <section aria-labelledby="bid-history-heading">
+                <h2 id="bid-history-heading" class="h6">Bid history</h2>
+                @if (history.Count == 0)
+                {
+                    <p class="text-muted small">No bids yet.</p>
+                }
+                else
+                {
+                    <ol class="list-unstyled bid-history">
+                        @foreach (var bid in history)
+                        {
+                            <li class="bid-history-row">
+                                <span class="bid-history-amount">@Money.FormatUsd(bid.AmountCents)</span>
+                                <span>@bid.BidderName@(bid.IsViewer ? " (you)" : "")</span>
+                                <time class="text-muted small" datetime="@bid.PlacedAtUtc.ToString("o")">@bid.PlacedAtUtc.ToString("MMM d, HH:mm:ss") UTC</time>
+                            </li>
+                        }
+                    </ol>
+                }
+            </section>
         </div>
     </div>
 }
@@ -115,12 +205,18 @@ else
     [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
 
     private AuctionView? view;
+    private IReadOnlyList<BidLine> history = [];
     private string? userId;
     private bool loading = true;
     private bool busy;
     private bool confirmingCancel;
     private string? message;
     private bool messageIsError;
+    private string bidText = "";
+    private DateTime now;
+
+    private IDisposable? subscription;
+    private CancellationTokenSource? ticking;
 
     private string StatusLabel => view!.Auction.Status switch
     {
@@ -134,8 +230,98 @@ else
     protected override async Task OnParametersSetAsync()
     {
         userId = (await AuthState).User.GetUserId();
-        view = await AuctionService.GetAsync(Id, userId);
+        await ReloadAsync();
         loading = false;
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        // Only once the page is interactive: live bids from other people, and the one-second countdown.
+        if (!firstRender)
+            return;
+        subscription = Events.Subscribe(Id, OnAuctionEventAsync);
+        ticking = new CancellationTokenSource();
+        _ = TickAsync(ticking.Token);
+    }
+
+    private async Task ReloadAsync()
+    {
+        now = Clock.GetUtcNow().UtcDateTime;
+        var previousMinimum = view?.MinimumNextBid;
+        view = await AuctionService.GetAsync(Id, userId);
+        history = view is null ? [] : await Bidding.HistoryAsync(Id, userId);
+
+        // Keep what the bidder typed unless it's now below the minimum.
+        if (view is not null && (bidText.Length == 0 || previousMinimum != view.MinimumNextBid
+            && (!Money.TryParseUsd(bidText, out var typed) || typed < view.MinimumNextBid)))
+            bidText = Money.FormatInput(view.MinimumNextBid);
+    }
+
+    private async Task TickAsync(CancellationToken token)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1), Clock);
+        try
+        {
+            while (await timer.WaitForNextTickAsync(token))
+            {
+                await InvokeAsync(async () =>
+                {
+                    now = Clock.GetUtcNow().UtcDateTime;
+                    try
+                    {
+                        // The moment it ends, show the result without waiting for the closer.
+                        if (view is { IsOpen: true } && view.Auction.EndsAtUtc <= now)
+                            await ReloadAsync();
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    {
+                        // A failed reload (say, a busy database) mustn't stop the clock; the next tick tries again.
+                        Logger.LogWarning(ex, "Couldn't refresh auction {AuctionId} after it ended", Id);
+                    }
+                    StateHasChanged();
+                });
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private Task OnAuctionEventAsync(AuctionEvent auctionEvent) => InvokeAsync(async () =>
+    {
+        await ReloadAsync();
+        // Your own bid already shows its own message; everyone else hears about the new bid.
+        if (auctionEvent is BidPlaced bid && view?.HighBidderId != userId)
+        {
+            var outbid = history.Any(h => h.IsViewer);
+            (message, messageIsError) = outbid
+                ? ($"You've been outbid: {bid.BidderName} bid {Money.FormatUsd(bid.AmountCents)}.", true)
+                : ($"New bid: {Money.FormatUsd(bid.AmountCents)} by {bid.BidderName}.", false);
+        }
+        StateHasChanged();
+    });
+
+    private async Task PlaceBidAsync()
+    {
+        if (!Money.TryParseUsd(bidText, out var amount))
+        {
+            (message, messageIsError) = ("Enter your bid in dollars, like 12.50.", true);
+            return;
+        }
+
+        busy = true;
+        try
+        {
+            var result = await Bidding.PlaceBidAsync(Id, userId!, amount);
+            (message, messageIsError) = result.Accepted
+                ? ($"Your bid of {Money.FormatUsd(amount)} is the highest.", false)
+                : (result.Error, true);
+            await ReloadAsync();
+        }
+        finally
+        {
+            busy = false;
+        }
     }
 
     private async Task CancelAsync()
@@ -153,8 +339,16 @@ else
         finally
         {
             confirmingCancel = false;
-            view = await AuctionService.GetAsync(Id, userId);
+            await ReloadAsync();
             busy = false;
         }
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        subscription?.Dispose();
+        ticking?.Cancel();
+        ticking?.Dispose();
+        return ValueTask.CompletedTask;
     }
 }

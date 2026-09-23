@@ -97,6 +97,7 @@ public sealed class DeckService(IDbContextFactory<ApplicationDbContext> dbFactor
         var deck = await LoadOwnedAsync(db, deckId, ownerId, ct);
         db.Decks.Remove(deck);
         await db.SaveChangesAsync(ct);
+        await WatchService.RemoveAllAsync(db, Core.Watchlist.WatchTarget.Deck, deckId, ct);
     }
 
     /// <summary>Adds copies of a card by exact name. Returns the card's Scryfall name, or null if Scryfall has no such card.</summary>

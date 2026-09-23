@@ -1,13 +1,244 @@
 @page "/profile"
 
+@using Maroos.Web.Data
 @using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Identity
 
 @attribute [Authorize]
 
+@inject UserManager<ApplicationUser> Users
+@inject DeckService DeckService
+@inject AuctionService AuctionService
+@inject BiddingService Bidding
+@inject WatchService Watches
+@inject TimeProvider Clock
+
 <PageTitle>Profile · Maroos</PageTitle>
 
-<h1>Profile</h1>
-
+<div class="d-flex flex-wrap align-items-baseline justify-content-between gap-2 mb-1">
+    <h1 class="mb-0">@displayName</h1>
+    <a href="Account/Manage" class="small">Account settings</a>
+</div>
 <AuthorizeView>
-    <p>Signed in as @context.User.Identity?.Name. Decks, listings, bids and watchlist arrive in Phase 6.</p>
+    <p class="text-muted">Signed in as @context.User.Identity?.Name. Other players see you as “@displayName”.</p>
 </AuthorizeView>
+
+<ul class="nav nav-tabs mb-3" role="tablist">
+    @foreach (var (key, label) in Tabs)
+    {
+        <li class="nav-item">
+            <a class="nav-link @(tab == key ? "active" : "")" aria-current="@(tab == key ? "page" : null)" href="profile?tab=@key">@label</a>
+        </li>
+    }
+</ul>
+
+@switch (tab)
+{
+    case "listings":
+        @if (listings.Count == 0)
+        {
+            <p>You haven't listed anything. <a href="auctions/new">List a card</a>.</p>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table align-middle profile-listings">
+                    <thead>
+                        <tr>
+                            <th scope="col">Card</th>
+                            <th scope="col">Status</th>
+                            <th scope="col" class="text-end">Price</th>
+                            <th scope="col" class="text-end">Bids</th>
+                            <th scope="col">Ends / winner</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var listing in listings)
+                        {
+                            <tr>
+                                <td><a href="auctions/@listing.Id">@listing.CardName</a> <span class="text-muted small">@listing.SetName</span></td>
+                                <td><span class="badge @(listing.IsOpen ? "text-bg-success" : "text-bg-secondary")">@ListingStatus(listing)</span></td>
+                                <td class="text-end">@Money.FormatUsd(listing.CurrentCents)</td>
+                                <td class="text-end">@listing.BidCount</td>
+                                <td>
+                                    @if (listing.IsOpen)
+                                    {
+                                        <span>@AuctionRules.TimeLeft(now, listing.EndsAtUtc) left</span>
+                                    }
+                                    else if (listing.WinnerName is { } winner)
+                                    {
+                                        <span>Sold to @winner</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">—</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+        break;
+
+    case "bids":
+        @if (bids.Count == 0)
+        {
+            <p>You haven't bid on anything yet. <a href="auctions">Browse auctions</a>.</p>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table align-middle profile-bids">
+                    <thead>
+                        <tr>
+                            <th scope="col">Card</th>
+                            <th scope="col">Where you stand</th>
+                            <th scope="col" class="text-end">Your bid</th>
+                            <th scope="col" class="text-end">High bid</th>
+                            <th scope="col">Ends</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var bid in bids)
+                        {
+                            <tr data-state="@bid.State">
+                                <td><a href="auctions/@bid.AuctionId">@bid.CardName</a> <span class="text-muted small">@bid.SetName</span></td>
+                                <td><span class="badge @BidBadge(bid.State)">@BidLabel(bid.State)</span></td>
+                                <td class="text-end">@Money.FormatUsd(bid.MyHighCents)</td>
+                                <td class="text-end">@Money.FormatUsd(bid.CurrentCents)</td>
+                                <td>@AuctionRules.TimeLeft(now, bid.EndsAtUtc)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+        break;
+
+    case "watchlist":
+        @if (watchlist.Decks.Count == 0 && watchlist.Auctions.Count == 0)
+        {
+            <p>Nothing saved yet. Use the ♡ Watch button on a deck or auction to keep it here.</p>
+        }
+        else
+        {
+            @if (watchlist.Auctions.Count > 0)
+            {
+                <h2 class="h5">Auctions</h2>
+                <ul class="list-group mb-4 profile-watch-auctions">
+                    @foreach (var auction in watchlist.Auctions)
+                    {
+                        <li class="list-group-item d-flex flex-wrap justify-content-between gap-2">
+                            <span><a href="auctions/@auction.Id">@auction.CardName</a> <span class="text-muted small">@auction.SetName</span></span>
+                            <span>
+                                @Money.FormatUsd(auction.CurrentCents) ·
+                                @(auction.Status == AuctionStatus.Cancelled ? "Cancelled" : auction.IsOpen ? AuctionRules.TimeLeft(now, auction.EndsAtUtc) + " left" : "Ended")
+                            </span>
+                        </li>
+                    }
+                </ul>
+            }
+            @if (watchlist.Decks.Count > 0)
+            {
+                <h2 class="h5">Decks</h2>
+                <ul class="list-group profile-watch-decks">
+                    @foreach (var deck in watchlist.Decks)
+                    {
+                        <li class="list-group-item d-flex flex-wrap justify-content-between gap-2">
+                            <a href="decks/@deck.Id">@deck.Name</a>
+                            <span class="text-muted small">@DeckFormats.DisplayName(deck.Format) · by @deck.OwnerName</span>
+                        </li>
+                    }
+                </ul>
+            }
+        }
+        break;
+
+    default:
+        @if (decks.Count == 0)
+        {
+            <p>No decks yet. <a href="decks/new">Build one</a>.</p>
+        }
+        else
+        {
+            <ul class="list-group profile-decks">
+                @foreach (var deck in decks)
+                {
+                    <li class="list-group-item d-flex flex-wrap justify-content-between gap-2">
+                        <a href="decks/@deck.Id">@deck.Name</a>
+                        <span class="text-muted small">
+                            @DeckFormats.DisplayName(deck.Format) · @deck.MainCount cards · @(deck.IsPublic ? "Public" : "Private")
+                        </span>
+                    </li>
+                }
+            </ul>
+        }
+        break;
+}
+
+@code {
+    private static readonly (string Key, string Label)[] Tabs =
+    [
+        ("decks", "My decks"),
+        ("listings", "My listings"),
+        ("bids", "My bids"),
+        ("watchlist", "Watchlist"),
+    ];
+
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    [SupplyParameterFromQuery(Name = "tab")] public string? TabParam { get; set; }
+
+    private string tab = "decks";
+    private string displayName = ApplicationUser.FallbackDisplayName;
+    private DateTime now;
+
+    private IReadOnlyList<DeckSummary> decks = [];
+    private IReadOnlyList<SellerListing> listings = [];
+    private IReadOnlyList<MyBid> bids = [];
+    private Watchlist watchlist = new([], []);
+
+    protected override async Task OnInitializedAsync()
+    {
+        var principal = (await AuthState).User;
+        var userId = principal.GetUserId()!;
+        displayName = ApplicationUser.PublicName((await Users.GetUserAsync(principal))?.DisplayName);
+        now = Clock.GetUtcNow().UtcDateTime;
+        tab = Tabs.Any(t => t.Key == TabParam) ? TabParam! : "decks";
+
+        // Only load what the open tab shows.
+        switch (tab)
+        {
+            case "listings": listings = await AuctionService.ListForSellerAsync(userId); break;
+            case "bids": bids = await Bidding.ListForBidderAsync(userId); break;
+            case "watchlist": watchlist = await Watches.ListAsync(userId); break;
+            default: decks = await DeckService.ListAsync(userId); break;
+        }
+    }
+
+    private static string ListingStatus(SellerListing listing) => listing.Status switch
+    {
+        AuctionStatus.Cancelled => "Cancelled",
+        _ when listing.IsOpen => "Open",
+        _ when listing.BidCount > 0 => "Sold",
+        _ => "Ended, no bids",
+    };
+
+    private static string BidLabel(MyBidState state) => state switch
+    {
+        MyBidState.Winning => "Winning",
+        MyBidState.Outbid => "Outbid",
+        MyBidState.Won => "Won",
+        MyBidState.Lost => "Lost",
+        _ => "Cancelled",
+    };
+
+    private static string BidBadge(MyBidState state) => state switch
+    {
+        MyBidState.Winning or MyBidState.Won => "text-bg-success",
+        MyBidState.Outbid => "text-bg-warning",
+        _ => "text-bg-secondary",
+    };
+}

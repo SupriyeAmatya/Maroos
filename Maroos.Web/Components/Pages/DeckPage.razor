@@ -28,6 +28,10 @@ else
             <h1 class="mb-0 me-2">@deck.Name</h1>
             <span class="badge text-bg-primary">@DeckFormats.DisplayName(deck.Format)</span>
             <span class="badge @(deck.IsPublic ? "text-bg-success" : "text-bg-secondary")">@(deck.IsPublic ? "Public" : "Private")</span>
+            @if (!view.IsOwner)
+            {
+                <WatchButton Target="WatchTarget.Deck" TargetId="deck.Id" />
+            }
             @if (view.Entries.Count > 0)
             {
                 @if (view.Issues.Count == 0)

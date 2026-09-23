@@ -1,0 +1,53 @@
+@* Heart toggle that saves a deck or auction to the signed-in user's watchlist. *@
+
+@inject WatchService Watches
+@inject NavigationManager Navigation
+
+@if (userId is null)
+{
+    <a class="btn btn-sm btn-outline-secondary watch-button" href="@LoginUrl" title="Log in to save this to your watchlist">♡ Watch</a>
+}
+else
+{
+    <button type="button" class="btn btn-sm @(watching ? "btn-danger" : "btn-outline-secondary") watch-button"
+            aria-pressed="@(watching ? "true" : "false")" disabled="@busy" @onclick="ToggleAsync"
+            title="@(watching ? "Remove from your watchlist" : "Save to your watchlist")">
+        @(watching ? "♥ Watching" : "♡ Watch")
+    </button>
+}
+
+@code {
+    [Parameter, EditorRequired] public WatchTarget Target { get; set; }
+    [Parameter, EditorRequired] public Guid TargetId { get; set; }
+
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    private string? userId;
+    private bool watching;
+    private bool busy;
+
+    private string LoginUrl => $"Account/Login?ReturnUrl={Uri.EscapeDataString("/" + Navigation.ToBaseRelativePath(Navigation.Uri))}";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        userId = (await AuthState).User.GetUserId();
+        watching = userId is not null && await Watches.IsWatchingAsync(userId, Target, TargetId);
+    }
+
+    private async Task ToggleAsync()
+    {
+        busy = true;
+        try
+        {
+            watching = await Watches.ToggleAsync(userId!, Target, TargetId);
+        }
+        catch (KeyNotFoundException)
+        {
+            watching = false;
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+}

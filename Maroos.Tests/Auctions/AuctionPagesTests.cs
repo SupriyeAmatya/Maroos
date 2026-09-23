@@ -13,6 +13,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.Logging.Abstractions;
 using SkiaSharp;
 
 namespace Maroos.Tests.Auctions;
@@ -28,9 +29,13 @@ public sealed class AuctionPagesTests : BunitContext
     public AuctionPagesTests()
     {
         var cards = new CardService(FakeScryfallHandler.WithFixtures().CreateClient(), _db, new MemoryCache(new MemoryCacheOptions()), TimeProvider.System);
-        _auctions = new AuctionService(_db, cards, TimeProvider.System);
+        var events = new AuctionEvents(NullLogger<AuctionEvents>.Instance);
+        _auctions = new AuctionService(_db, cards, events, TimeProvider.System);
         Services.AddSingleton(cards);
         Services.AddSingleton(_auctions);
+        Services.AddSingleton(events);
+        Services.AddSingleton(new BiddingService(_db, events, TimeProvider.System, NullLogger<BiddingService>.Instance));
+        Services.AddSingleton(new WatchService(_db, TimeProvider.System));
         Services.AddSingleton<TimeProvider>(TimeProvider.System);
         Services.AddSingleton(new AuctionPhotoStore(new PhotoStorageOptions { Path = _photoRoot }, new TestEnvironment()));
 

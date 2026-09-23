@@ -1,6 +1,7 @@
 using Maroos.Core.Auctions;
 using Maroos.Core.Decks;
 using Maroos.Core.Scryfall;
+using Maroos.Core.Watchlist;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
@@ -12,6 +13,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<Deck> Decks => Set<Deck>();
     public DbSet<DeckCard> DeckCards => Set<DeckCard>();
     public DbSet<Auction> Auctions => Set<Auction>();
+    public DbSet<Bid> Bids => Set<Bid>();
+    public DbSet<Watch> Watches => Set<Watch>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -60,6 +63,22 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             auction.Property(a => a.PhotoPath).HasMaxLength(200);
             auction.HasIndex(a => new { a.Status, a.EndsAtUtc });
             auction.HasIndex(a => a.SellerId);
+        });
+
+        builder.Entity<Bid>(bid =>
+        {
+            bid.HasKey(b => b.Id);
+            bid.HasOne<Auction>().WithMany().HasForeignKey(b => b.AuctionId).OnDelete(DeleteBehavior.Cascade);
+            bid.HasOne<ApplicationUser>().WithMany().HasForeignKey(b => b.BidderId).OnDelete(DeleteBehavior.Cascade);
+            bid.HasIndex(b => new { b.AuctionId, b.AmountCents });
+            bid.HasIndex(b => b.BidderId);
+        });
+
+        builder.Entity<Watch>(watch =>
+        {
+            watch.HasKey(w => new { w.UserId, w.TargetType, w.TargetId });
+            watch.HasOne<ApplicationUser>().WithMany().HasForeignKey(w => w.UserId).OnDelete(DeleteBehavior.Cascade);
+            watch.HasIndex(w => new { w.TargetType, w.TargetId });
         });
     }
 }

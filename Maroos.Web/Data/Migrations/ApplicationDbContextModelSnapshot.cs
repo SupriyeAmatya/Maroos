@@ -88,6 +88,34 @@ namespace Maroos.Web.Migrations
                     b.ToTable("Auctions");
                 });
 
+            modelBuilder.Entity("Maroos.Core.Auctions.Bid", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("AmountCents")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid>("AuctionId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("BidderId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BidderId");
+
+                    b.HasIndex("AuctionId", "AmountCents");
+
+                    b.ToTable("Bids");
+                });
+
             modelBuilder.Entity("Maroos.Core.Decks.Deck", b =>
                 {
                     b.Property<Guid>("Id")
@@ -178,6 +206,27 @@ namespace Maroos.Web.Migrations
                     b.HasIndex("Name");
 
                     b.ToTable("CachedCards");
+                });
+
+            modelBuilder.Entity("Maroos.Core.Watchlist.Watch", b =>
+                {
+                    b.Property<string>("UserId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("TargetType")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid>("TargetId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("UserId", "TargetType", "TargetId");
+
+                    b.HasIndex("TargetType", "TargetId");
+
+                    b.ToTable("Watches");
                 });
 
             modelBuilder.Entity("Maroos.Web.Data.ApplicationUser", b =>
@@ -412,6 +461,21 @@ namespace Maroos.Web.Migrations
                         .OnDelete(DeleteBehavior.SetNull);
                 });
 
+            modelBuilder.Entity("Maroos.Core.Auctions.Bid", b =>
+                {
+                    b.HasOne("Maroos.Core.Auctions.Auction", null)
+                        .WithMany()
+                        .HasForeignKey("AuctionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Maroos.Web.Data.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("BidderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Maroos.Core.Decks.Deck", b =>
                 {
                     b.HasOne("Maroos.Web.Data.ApplicationUser", null)
@@ -426,6 +490,15 @@ namespace Maroos.Web.Migrations
                     b.HasOne("Maroos.Core.Decks.Deck", null)
                         .WithMany("Cards")
                         .HasForeignKey("DeckId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Maroos.Core.Watchlist.Watch", b =>
+                {
+                    b.HasOne("Maroos.Web.Data.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

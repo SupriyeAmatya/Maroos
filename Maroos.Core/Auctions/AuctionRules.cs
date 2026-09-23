@@ -70,6 +70,18 @@ public static class AuctionRules
         _ => "?",
     };
 
+    /// <summary>A ticking countdown: "2d 04:13:09", "04:13:09", or "Ended".</summary>
+    public static string Countdown(DateTime nowUtc, DateTime endsAtUtc)
+    {
+        var left = endsAtUtc - nowUtc;
+        if (left <= TimeSpan.Zero)
+            return "Ended";
+        // Round up so the clock shows 00:00:01 in the final second, not 00:00:00.
+        var seconds = (long)Math.Ceiling(left.TotalSeconds);
+        var clock = $"{seconds / 3600 % 24:00}:{seconds / 60 % 60:00}:{seconds % 60:00}";
+        return seconds >= 86400 ? $"{seconds / 86400}d {clock}" : clock;
+    }
+
     /// <summary>"2d 4h", "3h 12m", "45m", "under a minute" or "Ended".</summary>
     public static string TimeLeft(DateTime nowUtc, DateTime endsAtUtc)
     {
