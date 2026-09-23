@@ -1,6 +1,5 @@
 @page "/search"
 @rendermode InteractiveServer
-@implements IDisposable
 
 @inject CardService Cards
 @inject NavigationManager Navigation
@@ -9,34 +8,10 @@
 
 <h1>Card search</h1>
 
-@* Not a <form>: Enter is handled in OnKeyDown so it can either search or open the highlighted suggestion. *@
 <div class="card-search mb-3" role="search">
-    <div class="card-search-box">
-        <div class="input-group">
-            <input class="form-control form-control-lg" type="search" autocomplete="off"
-                   role="combobox" aria-autocomplete="list" aria-controls="card-suggestions"
-                   aria-expanded="@(ShowSuggestions ? "true" : "false")"
-                   aria-activedescendant="@(highlighted >= 0 ? $"card-suggestion-{highlighted}" : null)"
-                   aria-label="Card name or Scryfall query" placeholder="Card name or Scryfall query, e.g. lightning bolt or t:dragon c:r"
-                   @bind="text" @bind:event="oninput" @bind:after="OnTextChanged"
-                   @onkeydown="OnKeyDown" @onblur="HideSuggestions" />
-            <button class="btn btn-primary" type="button" @onclick="Submit">Search</button>
-        </div>
-        @if (ShowSuggestions)
-        {
-            <ul id="card-suggestions" class="card-suggestions list-group shadow" role="listbox" aria-label="Card name suggestions">
-                @for (var i = 0; i < suggestions.Count; i++)
-                {
-                    var index = i;
-                    <li id="card-suggestion-@index" role="option" aria-selected="@(index == highlighted ? "true" : "false")"
-                        class="list-group-item list-group-item-action @(index == highlighted ? "active" : "")"
-                        @onmousedown="() => Choose(suggestions[index])" @onmousedown:preventDefault>
-                        @suggestions[index]
-                    </li>
-                }
-            </ul>
-        }
-    </div>
+    <CardAutocomplete Text="@Q" OnSubmit="OnSearch" InputClass="form-control-lg" ButtonText="Search"
+                      AriaLabel="Card name or Scryfall query"
+                      Placeholder="Card name or Scryfall query, e.g. lightning bolt or t:dragon c:r" />
     <div class="form-text">
         Supports <a href="https://scryfall.com/docs/syntax" target="_blank" rel="noopener">Scryfall search syntax</a>.
     </div>
@@ -94,28 +69,17 @@ else if (results is not null)
 }
 
 @code {
-    private static readonly TimeSpan AutocompleteDelay = TimeSpan.FromMilliseconds(300);
-
     [SupplyParameterFromQuery] public string? Q { get; set; }
     [SupplyParameterFromQuery(Name = "page")] public int? PageParam { get; set; }
 
     private int PageNumber => Math.Max(1, PageParam ?? 1);
 
-    private string text = "";
-    private IReadOnlyList<string> suggestions = [];
-    private int highlighted = -1;
-    private bool suggestionsOpen;
     private ScryfallList<ScryfallCard>? results;
     private bool loading;
     private string? error;
-    private CancellationTokenSource? typing;
-
-    private bool ShowSuggestions => suggestionsOpen && suggestions.Count > 0;
 
     protected override async Task OnParametersSetAsync()
     {
-        text = Q ?? "";
-        CloseSuggestions();
         error = null;
         results = null;
         if (string.IsNullOrWhiteSpace(Q))
@@ -141,93 +105,15 @@ else if (results is not null)
             Navigation.NavigateTo($"card/{only.Id}", replace: true);
     }
 
-    private async Task OnTextChanged()
+    /// <summary>A picked suggestion searches for that exact name, which lands on the card page.</summary>
+    private void OnSearch(CardAutocompleteSubmit submit)
     {
-        var token = RestartTyping();
-        try
-        {
-            await Task.Delay(AutocompleteDelay, token);
-            suggestions = await Cards.AutocompleteAsync(text, token);
-            highlighted = -1;
-            suggestionsOpen = true;
-        }
-        catch (OperationCanceledException)
-        {
-            // A newer keystroke (or a search) replaced this one.
-        }
-        catch (HttpRequestException)
-        {
-            suggestions = [];
-        }
-    }
-
-    private void OnKeyDown(KeyboardEventArgs e)
-    {
-        switch (e.Key)
-        {
-            case "ArrowDown" when ShowSuggestions:
-                highlighted = (highlighted + 1) % suggestions.Count;
-                break;
-            case "ArrowUp" when ShowSuggestions:
-                highlighted = highlighted <= 0 ? suggestions.Count - 1 : highlighted - 1;
-                break;
-            case "Escape":
-                CloseSuggestions();
-                break;
-            case "Enter" when ShowSuggestions && highlighted >= 0:
-                Choose(suggestions[highlighted]);
-                break;
-            case "Enter":
-                Submit();
-                break;
-        }
-    }
-
-    private void HideSuggestions() => suggestionsOpen = false;
-
-    /// <summary>Picking a suggestion searches for that exact name, which lands on the card page.</summary>
-    private void Choose(string name)
-    {
-        text = name;
-        NavigateToSearch($"!\"{name}\"");
-    }
-
-    private void Submit() => NavigateToSearch(text);
-
-    private void NavigateToSearch(string query)
-    {
-        if (string.IsNullOrWhiteSpace(query))
-            return;
-
-        RestartTyping();
-        CloseSuggestions();
-        var url = $"search?q={Uri.EscapeDataString(query.Trim())}";
+        var query = submit.IsSuggestion ? $"!\"{submit.Text}\"" : submit.Text;
+        var url = $"search?q={Uri.EscapeDataString(query)}";
         if (Navigation.ToBaseRelativePath(Navigation.Uri) != url)
             Navigation.NavigateTo(url);
     }
 
-    private void CloseSuggestions()
-    {
-        suggestions = [];
-        suggestionsOpen = false;
-        highlighted = -1;
-    }
-
-    /// <summary>Cancels any pending autocomplete and returns a token for the next one.</summary>
-    private CancellationToken RestartTyping()
-    {
-        typing?.Cancel();
-        typing?.Dispose();
-        typing = new CancellationTokenSource();
-        return typing.Token;
-    }
-
     private string PageUrl(int page) =>
         Navigation.GetUriWithQueryParameters(new Dictionary<string, object?> { ["q"] = Q, ["page"] = page });
-
-    public void Dispose()
-    {
-        typing?.Cancel();
-        typing?.Dispose();
-    }
 }

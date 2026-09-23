@@ -107,10 +107,10 @@ public class ScryfallClientTests
     }
 
     [Fact]
-    public async Task GetCollectionAsync_sends_75_names_per_request_and_reports_not_found()
+    public async Task GetCollectionAsync_sends_75_names_per_request_and_pairs_each_with_its_card()
     {
         var handler = FakeScryfallHandler.WithFixtures();
-        var names = Enumerable.Range(1, 80).Select(i => $"Card {i}").ToList();
+        var names = Enumerable.Range(1, 78).Select(i => $"Unknown Card {i}").Append("Sol Ring").Append("lightning bolt").ToList();
 
         var result = await handler.CreateClient().GetCollectionAsync(names);
 
@@ -118,9 +118,49 @@ public class ScryfallClientTests
         Assert.All(handler.Requests, r => Assert.Equal(HttpMethod.Post, r.Method));
         Assert.Equal(75, IdentifierCount(handler.Requests[0].Body!));
         Assert.Equal(5, IdentifierCount(handler.Requests[1].Body!));
-        // The fixture answers each batch with Sol Ring found and one name not found.
-        Assert.Equal(["Sol Ring", "Sol Ring"], result.Cards.Select(c => c.Name));
-        Assert.Equal(["Not A Real Card", "Not A Real Card"], result.NotFound);
+
+        Assert.Equal(78, result.NotFound.Count);
+        Assert.Equal("Sol Ring", result.Found[CardIdentifier.ForName("Sol Ring")].Card.Name);
+        Assert.Equal(Fixtures.LightningBoltId, result.Found[CardIdentifier.ForName("lightning bolt")].Card.Id);
+        Assert.Contains("\"oracle_text\"", result.Found[CardIdentifier.ForName("Sol Ring")].Json);
+    }
+
+    [Fact]
+    public async Task GetCollectionAsync_finds_printings_by_set_and_collector_number_and_cards_by_id()
+    {
+        var result = await FakeScryfallHandler.WithFixtures().CreateClient().GetCollectionAsync(
+            [CardIdentifier.ForPrinting("c21", "263"), CardIdentifier.ForId(Fixtures.MountainId), CardIdentifier.ForPrinting("c21", "9999")]);
+
+        Assert.Equal(Fixtures.SolRingC21Id, result.Found[CardIdentifier.ForPrinting("c21", "263")].Card.Id);
+        Assert.Equal("Mountain", result.Found[CardIdentifier.ForId(Fixtures.MountainId)].Card.Name);
+        Assert.Equal([CardIdentifier.ForPrinting("c21", "9999")], result.NotFound);
+    }
+
+    [Fact]
+    public async Task GetCollectionAsync_sends_only_the_identifier_fields_that_are_set()
+    {
+        var handler = FakeScryfallHandler.WithFixtures();
+
+        await handler.CreateClient().GetCollectionAsync([CardIdentifier.ForPrinting("c21", "263")]);
+
+        Assert.Equal("""{"identifiers":[{"set":"c21","collector_number":"263"}]}""", handler.Requests.Single().Body);
+    }
+
+    [Fact]
+    public async Task GetCollectionAsync_matches_by_name_when_scryfall_results_do_not_line_up_with_the_request()
+    {
+        // Out of order, and the unknown name missing from not_found: the counts don't match, so pair by name.
+        var handler = new FakeScryfallHandler
+        {
+            Respond = _ => FakeScryfallHandler.Json(HttpStatusCode.OK,
+                $$"""{"not_found":[],"data":[{{Fixtures.Read("card-lightning-bolt.json")}},{{Fixtures.Read("card-sol-ring-c21.json")}}]}"""),
+        };
+
+        var result = await handler.CreateClient().GetCollectionAsync(["Sol Ring", "Lightning Bolt", "Nope"]);
+
+        Assert.Equal(Fixtures.SolRingC21Id, result.Found[CardIdentifier.ForName("Sol Ring")].Card.Id);
+        Assert.Equal(Fixtures.LightningBoltId, result.Found[CardIdentifier.ForName("Lightning Bolt")].Card.Id);
+        Assert.False(result.Found.ContainsKey(CardIdentifier.ForName("Nope")));
     }
 
     [Fact]

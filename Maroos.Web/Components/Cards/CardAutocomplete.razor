@@ -1,0 +1,165 @@
+@* A text box with debounced Scryfall card-name suggestions. Arrow keys move through the list, Enter submits
+   the highlighted suggestion (or the typed text), Escape closes the list. The parent decides what submit does. *@
+@implements IDisposable
+
+@inject CardService Cards
+
+<div class="card-search-box">
+    <div class="input-group">
+        <input class="form-control @InputClass" type="search" autocomplete="off"
+               role="combobox" aria-autocomplete="list" aria-controls="@ListId"
+               aria-expanded="@(ShowSuggestions ? "true" : "false")"
+               aria-activedescendant="@(highlighted >= 0 ? $"{ListId}-{highlighted}" : null)"
+               aria-label="@AriaLabel" placeholder="@Placeholder" disabled="@Disabled"
+               @bind="text" @bind:event="oninput" @bind:after="OnTextChanged"
+               @onkeydown="OnKeyDown" @onblur="HideSuggestions" />
+        @ChildContent
+        <button class="btn btn-primary" type="button" disabled="@Disabled" @onclick="SubmitText">@ButtonText</button>
+    </div>
+    @if (ShowSuggestions)
+    {
+        <ul id="@ListId" class="card-suggestions list-group shadow" role="listbox" aria-label="Card name suggestions">
+            @for (var i = 0; i < suggestions.Count; i++)
+            {
+                var index = i;
+                <li id="@ListId-@index" role="option" aria-selected="@(index == highlighted ? "true" : "false")"
+                    class="list-group-item list-group-item-action @(index == highlighted ? "active" : "")"
+                    @onmousedown="() => SubmitSuggestion(suggestions[index])" @onmousedown:preventDefault>
+                    @suggestions[index]
+                </li>
+            }
+        </ul>
+    }
+</div>
+
+@code {
+    private static readonly TimeSpan AutocompleteDelay = TimeSpan.FromMilliseconds(300);
+
+    /// <summary>Text to show in the box; applied whenever the parent passes a new value.</summary>
+    [Parameter] public string? Text { get; set; }
+
+    /// <summary>Called with the text and whether it came from picking a suggestion (an exact card name).</summary>
+    [Parameter] public EventCallback<CardAutocompleteSubmit> OnSubmit { get; set; }
+
+    [Parameter] public string Placeholder { get; set; } = "Card name";
+    [Parameter] public string AriaLabel { get; set; } = "Card name";
+    [Parameter] public string ButtonText { get; set; } = "Search";
+    [Parameter] public string ListId { get; set; } = "card-suggestions";
+    [Parameter] public string? InputClass { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+
+    /// <summary>Extra controls placed between the text box and the button (e.g. a board picker).</summary>
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private string text = "";
+    private string? appliedText;
+    private IReadOnlyList<string> suggestions = [];
+    private int highlighted = -1;
+    private bool suggestionsOpen;
+    private CancellationTokenSource? typing;
+
+    private bool ShowSuggestions => suggestionsOpen && suggestions.Count > 0;
+
+    protected override void OnParametersSet()
+    {
+        if (Text != appliedText)
+        {
+            appliedText = Text;
+            text = Text ?? "";
+            RestartTyping();
+            CloseSuggestions();
+        }
+    }
+
+    public void Clear()
+    {
+        text = "";
+        RestartTyping();
+        CloseSuggestions();
+        StateHasChanged();
+    }
+
+    private async Task OnTextChanged()
+    {
+        var token = RestartTyping();
+        try
+        {
+            await Task.Delay(AutocompleteDelay, token);
+            suggestions = await Cards.AutocompleteAsync(text, token);
+            highlighted = -1;
+            suggestionsOpen = true;
+        }
+        catch (OperationCanceledException)
+        {
+            // A newer keystroke (or a submit) replaced this one.
+        }
+        catch (HttpRequestException)
+        {
+            suggestions = [];
+        }
+    }
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        switch (e.Key)
+        {
+            case "ArrowDown" when ShowSuggestions:
+                highlighted = (highlighted + 1) % suggestions.Count;
+                break;
+            case "ArrowUp" when ShowSuggestions:
+                highlighted = highlighted <= 0 ? suggestions.Count - 1 : highlighted - 1;
+                break;
+            case "Escape":
+                CloseSuggestions();
+                break;
+            case "Enter" when ShowSuggestions && highlighted >= 0:
+                await SubmitSuggestion(suggestions[highlighted]);
+                break;
+            case "Enter":
+                await SubmitText();
+                break;
+        }
+    }
+
+    private void HideSuggestions() => suggestionsOpen = false;
+
+    private Task SubmitSuggestion(string name)
+    {
+        text = name;
+        return SubmitAsync(new CardAutocompleteSubmit(name, IsSuggestion: true));
+    }
+
+    private Task SubmitText() => SubmitAsync(new CardAutocompleteSubmit(text.Trim(), IsSuggestion: false));
+
+    private async Task SubmitAsync(CardAutocompleteSubmit submit)
+    {
+        if (Disabled || string.IsNullOrWhiteSpace(submit.Text))
+            return;
+
+        RestartTyping();
+        CloseSuggestions();
+        await OnSubmit.InvokeAsync(submit);
+    }
+
+    private void CloseSuggestions()
+    {
+        suggestions = [];
+        suggestionsOpen = false;
+        highlighted = -1;
+    }
+
+    /// <summary>Cancels any pending autocomplete and returns a token for the next one.</summary>
+    private CancellationToken RestartTyping()
+    {
+        typing?.Cancel();
+        typing?.Dispose();
+        typing = new CancellationTokenSource();
+        return typing.Token;
+    }
+
+    public void Dispose()
+    {
+        typing?.Cancel();
+        typing?.Dispose();
+    }
+}

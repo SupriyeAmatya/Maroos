@@ -51,14 +51,21 @@ public sealed class ScryfallClient(HttpClient http, ScryfallThrottle throttle)
         }, ct);
 
     /// <summary>Looks cards up by exact name, <see cref="CollectionBatchSize"/> names per request.</summary>
-    public async Task<ScryfallCollectionResult> GetCollectionAsync(IEnumerable<string> names, CancellationToken ct = default)
-    {
-        var cards = new List<ScryfallCard>();
-        var notFound = new List<string>();
+    public Task<ScryfallCollectionResult> GetCollectionAsync(IEnumerable<string> names, CancellationToken ct = default) =>
+        GetCollectionAsync(
+            names.Where(n => !string.IsNullOrWhiteSpace(n)).Distinct(StringComparer.OrdinalIgnoreCase).Select(n => CardIdentifier.ForName(n.Trim())),
+            ct);
 
-        foreach (var batch in names.Where(n => !string.IsNullOrWhiteSpace(n)).Distinct(StringComparer.OrdinalIgnoreCase).Chunk(CollectionBatchSize))
+    /// <summary>Looks cards up by id, name or printing, <see cref="CollectionBatchSize"/> identifiers per request.</summary>
+    public async Task<ScryfallCollectionResult> GetCollectionAsync(IEnumerable<CardIdentifier> identifiers, CancellationToken ct = default)
+    {
+        var cards = new List<FetchedCard>();
+        var notFound = new List<CardIdentifier>();
+        var found = new Dictionary<CardIdentifier, FetchedCard>();
+
+        foreach (var batch in identifiers.Distinct().Chunk(CollectionBatchSize))
         {
-            var body = new { identifiers = batch.Select(name => new { name }) };
+            var body = new { identifiers = batch };
             var page = await throttle.RunAsync(async () =>
             {
                 using var response = await http.PostAsJsonAsync("cards/collection", body, ScryfallJson.Options, ct);
@@ -68,11 +75,41 @@ public sealed class ScryfallClient(HttpClient http, ScryfallThrottle throttle)
 
             if (page is null)
                 continue;
-            cards.AddRange(page.Data);
-            notFound.AddRange(page.NotFound.Select(id => id.Name).OfType<string>());
+            // Keep each card's raw JSON so callers can cache exactly what Scryfall sent.
+            var batchCards = page.Data.Select(json => new FetchedCard(ParseCard(json.GetRawText()), json.GetRawText())).ToList();
+            cards.AddRange(batchCards);
+            notFound.AddRange(page.NotFound);
+            MatchToIdentifiers(batch, batchCards, page.NotFound, found);
         }
 
-        return new ScryfallCollectionResult(cards, notFound);
+        return new ScryfallCollectionResult(cards, notFound, found);
+    }
+
+    /// <summary>
+    /// Scryfall returns found cards in request order and echoes the identifiers it couldn't match, so walking
+    /// the batch pairs each identifier with its card. If the counts don't line up, match on id/printing/name instead.
+    /// </summary>
+    private static void MatchToIdentifiers(
+        IReadOnlyList<CardIdentifier> batch,
+        IReadOnlyList<FetchedCard> batchCards,
+        IReadOnlyList<CardIdentifier> batchNotFound,
+        Dictionary<CardIdentifier, FetchedCard> found)
+    {
+        var missing = batchNotFound.ToHashSet();
+        var requested = batch.Where(id => !missing.Contains(id)).ToList();
+
+        if (requested.Count == batchCards.Count)
+        {
+            for (var i = 0; i < requested.Count; i++)
+                found[requested[i]] = batchCards[i];
+            return;
+        }
+
+        foreach (var identifier in requested)
+        {
+            if (batchCards.FirstOrDefault(c => identifier.Matches(c.Card)) is { } card)
+                found[identifier] = card;
+        }
     }
 
     public static ScryfallCard ParseCard(string json) =>
@@ -91,7 +128,5 @@ public sealed class ScryfallClient(HttpClient http, ScryfallThrottle throttle)
 
     private sealed record ScryfallCatalog(IReadOnlyList<string> Data);
 
-    private sealed record ScryfallCollectionPage(IReadOnlyList<ScryfallCard> Data, IReadOnlyList<ScryfallIdentifier> NotFound);
-
-    private sealed record ScryfallIdentifier(string? Name);
+    private sealed record ScryfallCollectionPage(IReadOnlyList<JsonElement> Data, IReadOnlyList<CardIdentifier> NotFound);
 }

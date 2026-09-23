@@ -1,7 +1,71 @@
 @page "/decks"
 
-<PageTitle>Decks · Maroos</PageTitle>
+@using Microsoft.AspNetCore.Authorization
 
-<h1>Decks</h1>
+@attribute [Authorize]
 
-<p>Coming in Phase 3.</p>
+@inject DeckService DeckService
+
+<PageTitle>My decks · Maroos</PageTitle>
+
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+    <h1 class="mb-0">My decks</h1>
+    <a class="btn btn-primary" href="decks/new">New deck</a>
+</div>
+
+@if (decks is null)
+{
+    <p class="text-muted">Loading…</p>
+}
+else if (decks.Count == 0)
+{
+    <p>You haven't built a deck yet. <a href="decks/new">Start one</a> and paste in a list or add cards one by one.</p>
+}
+else
+{
+    <div class="table-responsive">
+        <table class="table align-middle deck-table">
+            <thead>
+                <tr>
+                    <th scope="col">Name</th>
+                    <th scope="col">Format</th>
+                    <th scope="col" class="text-end">Cards</th>
+                    <th scope="col">Visibility</th>
+                    <th scope="col">Updated</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var deck in decks)
+                {
+                    <tr>
+                        <td><a href="decks/@deck.Id">@deck.Name</a></td>
+                        <td>@DeckFormats.DisplayName(deck.Format)</td>
+                        <td class="text-end">
+                            @deck.MainCount
+                            @if (deck.SideCount > 0)
+                            {
+                                <span class="text-muted"> + @deck.SideCount</span>
+                            }
+                        </td>
+                        <td>
+                            <span class="badge @(deck.IsPublic ? "text-bg-success" : "text-bg-secondary")">@(deck.IsPublic ? "Public" : "Private")</span>
+                        </td>
+                        <td><time datetime="@deck.UpdatedAt.ToString("o")">@deck.UpdatedAt.ToString("MMM d, yyyy")</time></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    private IReadOnlyList<DeckSummary>? decks;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthState).User;
+        decks = await DeckService.ListAsync(user.GetUserId()!);
+    }
+}

@@ -1,0 +1,76 @@
+@page "/decks/new"
+
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Authorization
+
+@attribute [Authorize]
+
+@inject DeckService DeckService
+@inject NavigationManager Navigation
+
+<PageTitle>New deck · Maroos</PageTitle>
+
+<h1>New deck</h1>
+
+<EditForm Model="Input" method="post" OnValidSubmit="CreateAsync" FormName="new-deck" class="new-deck-form">
+    <DataAnnotationsValidator />
+    <ValidationSummary class="text-danger" role="alert" />
+
+    <div class="mb-3">
+        <label for="deck-name" class="form-label">Name</label>
+        <InputText id="deck-name" @bind-Value="Input.Name" class="form-control" placeholder="Mono-Red Burn" />
+        <ValidationMessage For="() => Input.Name" class="text-danger" />
+    </div>
+
+    <div class="mb-3">
+        <label for="deck-format" class="form-label">Format</label>
+        <InputSelect id="deck-format" @bind-Value="Input.Format" class="form-select">
+            @foreach (var format in DeckFormats.All)
+            {
+                <option value="@format">@DeckFormats.DisplayName(format)</option>
+            }
+        </InputSelect>
+    </div>
+
+    <div class="form-check mb-3">
+        <InputCheckbox id="deck-public" @bind-Value="Input.IsPublic" class="form-check-input" />
+        <label for="deck-public" class="form-check-label">Public — anyone with the link can view it</label>
+    </div>
+
+    <button type="submit" class="btn btn-primary">Create deck</button>
+    <a href="decks" class="btn btn-link">Cancel</a>
+</EditForm>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    [SupplyParameterFromForm] private NewDeckModel Input { get; set; } = default!;
+
+    protected override void OnInitialized() => Input ??= new();
+
+    private async Task CreateAsync()
+    {
+        var user = (await AuthState).User;
+        var deck = await DeckService.CreateAsync(user.GetUserId()!, Input.Name, Input.Format, Input.IsPublic);
+        Navigation.NavigateTo($"decks/{deck.Id}");
+    }
+
+    private sealed class NewDeckModel
+    {
+        [Required(ErrorMessage = "Give the deck a name.")]
+        [StringLength(Deck.MaxNameLength)]
+        public string Name { get; set; } = "";
+
+        [Required]
+        [AllowedFormat]
+        public string Format { get; set; } = DeckFormats.Default;
+
+        public bool IsPublic { get; set; }
+    }
+
+    private sealed class AllowedFormatAttribute : ValidationAttribute
+    {
+        protected override ValidationResult? IsValid(object? value, ValidationContext context) =>
+            value is string format && DeckFormats.IsKnown(format) ? ValidationResult.Success : new ValidationResult("Pick a format from the list.");
+    }
+}

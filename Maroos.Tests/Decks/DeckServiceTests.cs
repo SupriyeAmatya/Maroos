@@ -1,0 +1,255 @@
+using Maroos.Core.Decks;
+using Maroos.Tests.Scryfall;
+using Maroos.Web.Data;
+using Maroos.Web.Services;
+using Microsoft.Extensions.Caching.Memory;
+
+namespace Maroos.Tests.Decks;
+
+public sealed class DeckServiceTests : IDisposable
+{
+    private const string SixtyCardList = """
+        4 Lightning Bolt
+        4 Delver of Secrets
+        1 Sol Ring (C21) 263
+        51 Mountain
+
+        Sideboard
+        3 Sol Ring
+        """;
+
+    private readonly TestDb _db = new();
+    private readonly FakeScryfallHandler _scryfall = FakeScryfallHandler.WithFixtures();
+    private readonly DeckService _decks;
+    private readonly string _alice;
+    private readonly string _bob;
+
+    public DeckServiceTests()
+    {
+        var clock = new ManualClock(new DateTimeOffset(2026, 9, 23, 12, 0, 0, TimeSpan.Zero));
+        var cards = new CardService(_scryfall.CreateClient(), _db, new MemoryCache(new MemoryCacheOptions()), clock);
+        _decks = new DeckService(_db, cards, clock);
+        _alice = AddUser("alice@example.com");
+        _bob = AddUser("bob@example.com");
+    }
+
+    public void Dispose() => _db.Dispose();
+
+    private string AddUser(string email)
+    {
+        using var db = _db.CreateDbContext();
+        var user = new ApplicationUser { UserName = email, Email = email };
+        db.Users.Add(user);
+        db.SaveChanges();
+        return user.Id;
+    }
+
+    private async Task<Guid> NewDeckAsync(string owner, bool isPublic = false) =>
+        (await _decks.CreateAsync(owner, "Burn", "modern", isPublic)).Id;
+
+    [Fact]
+    public async Task Import_of_a_60_card_list_survives_a_reload_and_exports_the_same_list()
+    {
+        var deckId = await NewDeckAsync(_alice);
+
+        var result = await _decks.ImportAsync(deckId, _alice, SixtyCardList, replace: false);
+
+        Assert.Equal(63, result.CardsAdded);
+        Assert.Empty(result.NotFound);
+        Assert.Empty(result.Unreadable);
+
+        // A fresh load reads everything back from the database.
+        var view = (await _decks.GetAsync(deckId, _alice))!;
+        Assert.Equal(60, view.Count(Board.Main));
+        Assert.Equal(3, view.Count(Board.Side));
+        Assert.All(view.Entries, e => Assert.NotNull(e.Card));
+
+        Assert.Equal("""
+            4 Delver of Secrets // Insectile Aberration
+            4 Lightning Bolt
+            51 Mountain
+            1 Sol Ring
+
+            Sideboard
+            3 Sol Ring
+            """.ReplaceLineEndings("\n"), view.Export().ReplaceLineEndings("\n"));
+
+        // Importing the export into a new deck gives the same deck.
+        var copyId = await NewDeckAsync(_alice);
+        await _decks.ImportAsync(copyId, _alice, view.Export(includePrintings: true), replace: false);
+        var copy = (await _decks.GetAsync(copyId, _alice))!;
+        Assert.Equal(view.Export(includePrintings: true), copy.Export(includePrintings: true));
+    }
+
+    [Fact]
+    public async Task Import_uses_the_printing_from_the_set_code()
+    {
+        var deckId = await NewDeckAsync(_alice);
+
+        await _decks.ImportAsync(deckId, _alice, "1 Sol Ring (C21) 263", replace: false);
+
+        var line = Assert.Single((await _decks.GetAsync(deckId, _alice))!.Entries).Line;
+        Assert.Equal(Fixtures.SolRingC21Id, line.ScryfallId);
+        Assert.Equal("c21", line.SetCode);
+        Assert.Equal("263", line.CollectorNumber);
+    }
+
+    [Fact]
+    public async Task Import_falls_back_to_the_name_when_the_printing_does_not_exist()
+    {
+        var deckId = await NewDeckAsync(_alice);
+
+        var result = await _decks.ImportAsync(deckId, _alice, "4 Lightning Bolt (XXX) 999", replace: false);
+
+        Assert.Equal(4, result.CardsAdded);
+        Assert.Empty(result.NotFound);
+        Assert.Equal(Fixtures.LightningBoltId, Assert.Single((await _decks.GetAsync(deckId, _alice))!.Entries).Line.ScryfallId);
+    }
+
+    [Fact]
+    public async Task Import_reports_unknown_cards_and_unreadable_lines_but_keeps_the_rest()
+    {
+        var deckId = await NewDeckAsync(_alice);
+
+        var result = await _decks.ImportAsync(deckId, _alice, "4 Lightning Bolt\n2 Not A Real Card\n0 Mountain", replace: false);
+
+        Assert.Equal(4, result.CardsAdded);
+        Assert.Equal(["Not A Real Card"], result.NotFound);
+        Assert.Equal(["0 Mountain"], result.Unreadable);
+        Assert.Equal(4, (await _decks.GetAsync(deckId, _alice))!.Count(Board.Main));
+    }
+
+    [Fact]
+    public async Task Import_merges_repeated_lines_and_adds_to_existing_cards()
+    {
+        var deckId = await NewDeckAsync(_alice);
+        await _decks.ImportAsync(deckId, _alice, "2 Lightning Bolt", replace: false);
+
+        await _decks.ImportAsync(deckId, _alice, "1 Lightning Bolt\n1 lightning bolt", replace: false);
+
+        var line = Assert.Single((await _decks.GetAsync(deckId, _alice))!.Entries).Line;
+        Assert.Equal(4, line.Quantity);
+        Assert.Equal("Lightning Bolt", line.CardName);
+    }
+
+    [Fact]
+    public async Task Import_with_replace_swaps_the_whole_list()
+    {
+        var deckId = await NewDeckAsync(_alice);
+        await _decks.ImportAsync(deckId, _alice, "4 Lightning Bolt\n20 Mountain", replace: false);
+
+        await _decks.ImportAsync(deckId, _alice, "2 Lightning Bolt\n1 Sol Ring", replace: true);
+
+        var view = (await _decks.GetAsync(deckId, _alice))!;
+        Assert.Equal(["2 Lightning Bolt", "1 Sol Ring"], view.Export().ReplaceLineEndings("\n").Split('\n'));
+    }
+
+    [Fact]
+    public async Task AddCard_adds_by_exact_name_and_reports_unknown_names()
+    {
+        var deckId = await NewDeckAsync(_alice);
+
+        Assert.Equal("Lightning Bolt", await _decks.AddCardAsync(deckId, _alice, "lightning bolt", Board.Main));
+        Assert.Equal("Lightning Bolt", await _decks.AddCardAsync(deckId, _alice, "Lightning Bolt", Board.Main));
+        Assert.Equal("Mountain", await _decks.AddCardAsync(deckId, _alice, "Mountain", Board.Side, quantity: 3));
+        Assert.Null(await _decks.AddCardAsync(deckId, _alice, "Not A Real Card", Board.Main));
+
+        var view = (await _decks.GetAsync(deckId, _alice))!;
+        Assert.Equal(2, view.Count(Board.Main));
+        Assert.Equal(3, view.Count(Board.Side));
+    }
+
+    [Fact]
+    public async Task AdjustQuantity_changes_counts_and_removes_at_zero()
+    {
+        var deckId = await NewDeckAsync(_alice);
+        await _decks.ImportAsync(deckId, _alice, "2 Lightning Bolt", replace: false);
+
+        await _decks.AdjustQuantityAsync(deckId, _alice, Fixtures.LightningBoltId, Board.Main, +1);
+        Assert.Equal(3, (await _decks.GetAsync(deckId, _alice))!.Count(Board.Main));
+
+        await _decks.AdjustQuantityAsync(deckId, _alice, Fixtures.LightningBoltId, Board.Main, -3);
+        Assert.Empty((await _decks.GetAsync(deckId, _alice))!.Entries);
+    }
+
+    [Fact]
+    public async Task Only_the_owner_can_change_a_deck()
+    {
+        var deckId = await NewDeckAsync(_alice, isPublic: true);
+        await _decks.ImportAsync(deckId, _alice, "4 Lightning Bolt", replace: false);
+
+        await Assert.ThrowsAsync<DeckAccessException>(() => _decks.ImportAsync(deckId, _bob, "1 Sol Ring", replace: true));
+        await Assert.ThrowsAsync<DeckAccessException>(() => _decks.AddCardAsync(deckId, _bob, "Sol Ring", Board.Main));
+        await Assert.ThrowsAsync<DeckAccessException>(() => _decks.AdjustQuantityAsync(deckId, _bob, Fixtures.LightningBoltId, Board.Main, -4));
+        await Assert.ThrowsAsync<DeckAccessException>(() => _decks.UpdateSettingsAsync(deckId, _bob, "Mine now", "modern", true));
+        await Assert.ThrowsAsync<DeckAccessException>(() => _decks.DeleteAsync(deckId, _bob));
+
+        var view = (await _decks.GetAsync(deckId, _alice))!;
+        Assert.Equal("Burn", view.Deck.Name);
+        Assert.Equal("4 Lightning Bolt", view.Export());
+    }
+
+    [Fact]
+    public async Task Private_decks_are_visible_only_to_their_owner_and_public_ones_to_everyone()
+    {
+        var privateDeck = await NewDeckAsync(_alice, isPublic: false);
+        var publicDeck = await NewDeckAsync(_alice, isPublic: true);
+
+        Assert.True((await _decks.GetAsync(privateDeck, _alice))!.IsOwner);
+        Assert.Null(await _decks.GetAsync(privateDeck, _bob));
+        Assert.Null(await _decks.GetAsync(privateDeck, viewerId: null));
+
+        var asBob = (await _decks.GetAsync(publicDeck, _bob))!;
+        Assert.False(asBob.IsOwner);
+        Assert.False((await _decks.GetAsync(publicDeck, viewerId: null))!.IsOwner);
+
+        Assert.Null(await _decks.GetAsync(Guid.NewGuid(), _alice));
+    }
+
+    [Fact]
+    public async Task List_shows_only_the_owners_decks_with_counts()
+    {
+        var deckId = await NewDeckAsync(_alice);
+        await _decks.ImportAsync(deckId, _alice, SixtyCardList, replace: false);
+        await NewDeckAsync(_bob);
+
+        var summary = Assert.Single(await _decks.ListAsync(_alice));
+        Assert.Equal(deckId, summary.Id);
+        Assert.Equal(60, summary.MainCount);
+        Assert.Equal(3, summary.SideCount);
+    }
+
+    [Fact]
+    public async Task Settings_rename_change_format_and_visibility()
+    {
+        var deckId = await NewDeckAsync(_alice);
+
+        await _decks.UpdateSettingsAsync(deckId, _alice, "  Izzet Tempo  ", "legacy", isPublic: true);
+
+        var deck = (await _decks.GetAsync(deckId, _bob))!.Deck;
+        Assert.Equal("Izzet Tempo", deck.Name);
+        Assert.Equal("legacy", deck.Format);
+        Assert.True(deck.IsPublic);
+    }
+
+    [Theory]
+    [InlineData("   ", "modern")]
+    [InlineData("Burn", "not-a-format")]
+    public async Task Create_rejects_blank_names_and_unknown_formats(string name, string format)
+    {
+        await Assert.ThrowsAsync<ArgumentException>(() => _decks.CreateAsync(_alice, name, format));
+    }
+
+    [Fact]
+    public async Task Delete_removes_the_deck_and_its_cards()
+    {
+        var deckId = await NewDeckAsync(_alice);
+        await _decks.ImportAsync(deckId, _alice, "4 Lightning Bolt", replace: false);
+
+        await _decks.DeleteAsync(deckId, _alice);
+
+        Assert.Null(await _decks.GetAsync(deckId, _alice));
+        using var db = _db.CreateDbContext();
+        Assert.Empty(db.DeckCards);
+    }
+}

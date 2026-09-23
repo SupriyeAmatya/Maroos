@@ -56,6 +56,7 @@ builder.Services.AddHttpClient<ScryfallClient>(client =>
     client.DefaultRequestHeaders.Accept.ParseAdd("application/json");
 });
 builder.Services.AddScoped<CardService>();
+builder.Services.AddScoped<DeckService>();
 
 builder.Services.AddIdentityCore<ApplicationUser>(options =>
     {

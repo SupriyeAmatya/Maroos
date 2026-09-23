@@ -1,13 +1,11 @@
 using System.Net;
-using System.Text.RegularExpressions;
-using Microsoft.AspNetCore.Mvc.Testing;
+using static Maroos.Tests.Auth.PageForms;
 
 namespace Maroos.Tests.Auth;
 
 // Drives the real /Account/Register and /Account/Login pages over HTTP, the way a browser posts the forms.
-public partial class LoginPageFlowTests : IClassFixture<MaroosWebFactory>, IAsyncLifetime
+public class LoginPageFlowTests : IClassFixture<MaroosWebFactory>, IAsyncLifetime
 {
-    private const string Password = "Correct-horse-1";
     private readonly MaroosWebFactory _factory;
 
     public LoginPageFlowTests(MaroosWebFactory factory) => _factory = factory;
@@ -15,39 +13,7 @@ public partial class LoginPageFlowTests : IClassFixture<MaroosWebFactory>, IAsyn
     public Task InitializeAsync() => _factory.InitializeDatabaseAsync();
     public Task DisposeAsync() => Task.CompletedTask;
 
-    private HttpClient NewBrowser() =>
-        _factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = true, HandleCookies = true });
-
-    [GeneratedRegex("name=\"__RequestVerificationToken\"[^>]*value=\"([^\"]+)\"")]
-    private static partial Regex AntiforgeryField();
-
-    private static async Task<string> AntiforgeryTokenAsync(HttpClient browser, string url)
-    {
-        var html = await browser.GetStringAsync(url);
-        return AntiforgeryField().Match(html).Groups[1].Value;
-    }
-
-    private static async Task<HttpResponseMessage> PostFormAsync(HttpClient browser, string url, string handler, Dictionary<string, string> fields)
-    {
-        fields["__RequestVerificationToken"] = await AntiforgeryTokenAsync(browser, url);
-        fields["_handler"] = handler;
-        return await browser.PostAsync(url, new FormUrlEncodedContent(fields));
-    }
-
-    private static Task<HttpResponseMessage> RegisterAsync(HttpClient browser, string email) =>
-        PostFormAsync(browser, "/Account/Register", "register", new()
-        {
-            ["Input.Email"] = email,
-            ["Input.Password"] = Password,
-            ["Input.ConfirmPassword"] = Password,
-        });
-
-    private static Task<HttpResponseMessage> LoginAsync(HttpClient browser, string email, string password) =>
-        PostFormAsync(browser, "/Account/Login", "login", new()
-        {
-            ["Input.Email"] = email,
-            ["Input.Password"] = password,
-        });
+    private HttpClient NewBrowser() => _factory.NewBrowser();
 
     private static async Task<bool> IsSignedInAsync(HttpClient browser, string email)
     {

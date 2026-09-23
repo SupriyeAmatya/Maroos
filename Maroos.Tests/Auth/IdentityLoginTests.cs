@@ -1,5 +1,8 @@
+using Maroos.Core.Scryfall;
+using Maroos.Tests.Scryfall;
 using Maroos.Web.Data;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -14,6 +17,12 @@ public class MaroosWebFactory : WebApplicationFactory<Program>
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseSetting("ConnectionStrings:DefaultConnection", $"DataSource={_dbPath}");
+        // Tests never reach the real Scryfall API.
+        builder.ConfigureTestServices(services =>
+        {
+            services.AddSingleton(new ScryfallThrottle(TimeSpan.Zero));
+            services.AddHttpClient<ScryfallClient>().ConfigurePrimaryHttpMessageHandler(() => FakeScryfallHandler.WithFixtures());
+        });
     }
 
     public async Task InitializeDatabaseAsync()

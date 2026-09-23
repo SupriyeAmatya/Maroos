@@ -51,5 +51,38 @@ public sealed record ScryfallList<T>(IReadOnlyList<T> Data, bool HasMore, string
     public static ScryfallList<T> Empty { get; } = new([], false, null, 0);
 }
 
-/// <summary>Result of <c>/cards/collection</c> lookups, with names Scryfall couldn't match.</summary>
-public sealed record ScryfallCollectionResult(IReadOnlyList<ScryfallCard> Cards, IReadOnlyList<string> NotFound);
+/// <summary>A card plus the raw JSON Scryfall sent for it (what the database cache stores).</summary>
+public sealed record FetchedCard(ScryfallCard Card, string Json);
+
+/// <summary>
+/// One <c>/cards/collection</c> identifier: a Scryfall id, a name (optionally narrowed to a set),
+/// or a set code plus collector number.
+/// </summary>
+public sealed record CardIdentifier(Guid? Id = null, string? Name = null, string? Set = null, string? CollectorNumber = null)
+{
+    public static CardIdentifier ForId(Guid id) => new(Id: id);
+    public static CardIdentifier ForName(string name) => new(Name: name);
+    public static CardIdentifier ForPrinting(string set, string collectorNumber) => new(Set: set, CollectorNumber: collectorNumber);
+
+    /// <summary>Whether <paramref name="card"/> is plausibly what this identifier asked for.</summary>
+    public bool Matches(ScryfallCard card) =>
+        Id is { } id ? card.Id == id
+        : CollectorNumber is not null ? string.Equals(card.Set, Set, StringComparison.OrdinalIgnoreCase)
+                                        && string.Equals(card.CollectorNumber, CollectorNumber, StringComparison.OrdinalIgnoreCase)
+        : Name is not null && NameMatches(card, Name) && (Set is null || string.Equals(card.Set, Set, StringComparison.OrdinalIgnoreCase));
+
+    private static bool NameMatches(ScryfallCard card, string name) =>
+        string.Equals(card.Name, name, StringComparison.OrdinalIgnoreCase)
+        || card.Name.Split(" // ").Any(face => string.Equals(face, name, StringComparison.OrdinalIgnoreCase));
+
+    public override string ToString() =>
+        Id?.ToString()
+        ?? (Name is not null ? (Set is not null ? $"{Name} ({Set.ToUpperInvariant()})" : Name)
+        : $"({Set?.ToUpperInvariant()}) {CollectorNumber}");
+}
+
+/// <summary>Result of <c>/cards/collection</c> lookups: which card each identifier found, and which found nothing.</summary>
+public sealed record ScryfallCollectionResult(
+    IReadOnlyList<FetchedCard> Cards,
+    IReadOnlyList<CardIdentifier> NotFound,
+    IReadOnlyDictionary<CardIdentifier, FetchedCard> Found);

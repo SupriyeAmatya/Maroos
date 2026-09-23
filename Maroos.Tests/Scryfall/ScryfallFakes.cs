@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using Maroos.Core.Scryfall;
 using Maroos.Web.Data;
 using Microsoft.Data.Sqlite;
@@ -14,6 +15,12 @@ public static class Fixtures
 
     public static readonly Guid LightningBoltId = Guid.Parse("7673784e-db4b-43a1-8d55-1bb9fc1e284f");
     public static readonly Guid DelverId = Guid.Parse("6904ea20-e504-47da-95a0-08739fdde260");
+    public static readonly Guid SolRingC21Id = Guid.Parse("4cbc6901-6a4a-4d0a-83ea-7eefa3b35021");
+    public static readonly Guid MountainId = Guid.Parse("2a844b96-6616-4c39-8f4f-5d14a3b2bd55");
+
+    /// <summary>Every saved single-card fixture: the cards the fake Scryfall "knows".</summary>
+    public static readonly IReadOnlyList<string> CardFiles =
+        ["card-lightning-bolt.json", "card-delver-dfc.json", "card-sol-ring-c21.json", "card-mountain.json"];
 }
 
 /// <summary>Records every request and answers with whatever <see cref="Respond"/> returns.</summary>
@@ -39,12 +46,40 @@ public sealed class FakeScryfallHandler : HttpMessageHandler
                 $$"""{"object":"list","total_cards":1,"has_more":false,"data":[{{Fixtures.Read("card-lightning-bolt.json")}}]}"""),
             "/cards/search" => Fixture("search-lightning-bolt.json"),
             "/cards/autocomplete" => Fixture("autocomplete-lightning-b.json"),
-            "/cards/collection" => Fixture("collection-sol-ring.json"),
-            var path when path == $"/cards/{Fixtures.LightningBoltId}" => Fixture("card-lightning-bolt.json"),
-            var path when path == $"/cards/{Fixtures.DelverId}" => Fixture("card-delver-dfc.json"),
+            "/cards/collection" => Collection(request),
+            var path when path.StartsWith("/cards/") && KnownCard(Guid.TryParse(path[7..], out var id) ? id : Guid.Empty) is { } json
+                => Json(HttpStatusCode.OK, json),
             _ => Json(HttpStatusCode.NotFound, """{"object":"error","code":"not_found","status":404}"""),
         },
     };
+
+    private static string? KnownCard(Guid id) =>
+        Fixtures.CardFiles.Select(Fixtures.Read).FirstOrDefault(json => ScryfallClient.ParseCard(json).Id == id);
+
+    /// <summary>
+    /// Like Scryfall's <c>/cards/collection</c>: found cards in request order, unknown identifiers echoed in not_found.
+    /// </summary>
+    private static HttpResponseMessage Collection(HttpRequestMessage request)
+    {
+        var body = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+        var identifiers = JsonSerializer.Deserialize<CollectionRequest>(body, ScryfallJson.Options)!.Identifiers;
+        var known = Fixtures.CardFiles.Select(Fixtures.Read).Select(json => (Card: ScryfallClient.ParseCard(json), Json: json)).ToList();
+
+        var data = new List<string>();
+        var notFound = new List<CardIdentifier>();
+        foreach (var identifier in identifiers)
+        {
+            if (known.FirstOrDefault(k => identifier.Matches(k.Card)) is { Json: not null } match)
+                data.Add(match.Json);
+            else
+                notFound.Add(identifier);
+        }
+
+        var json = $$"""{"object":"list","not_found":{{JsonSerializer.Serialize(notFound, ScryfallJson.Options)}},"data":[{{string.Join(",", data)}}]}""";
+        return Json(HttpStatusCode.OK, json);
+    }
+
+    private sealed record CollectionRequest(IReadOnlyList<CardIdentifier> Identifiers);
 
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
