@@ -68,6 +68,9 @@ public sealed class AuctionService(IDbContextFactory<ApplicationDbContext> dbFac
 {
     public async Task<Auction> CreateAsync(string sellerId, NewAuction request, CancellationToken ct = default)
     {
+        if (string.IsNullOrEmpty(sellerId))
+            throw new AuctionAccessException();
+
         var errors = AuctionRules.Validate(request).ToList();
         var card = errors.Count == 0 ? await cards.GetCardAsync(request.ScryfallId, ct) : null;
         if (errors.Count == 0 && card is null)
@@ -244,6 +247,9 @@ public sealed class AuctionService(IDbContextFactory<ApplicationDbContext> dbFac
     /// <summary>Cancels an open auction nobody has bid on. Only its seller can.</summary>
     public async Task CancelAsync(Guid auctionId, string sellerId, CancellationToken ct = default)
     {
+        if (string.IsNullOrEmpty(sellerId))
+            throw new AuctionAccessException();
+
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         var auction = await db.Auctions.FirstOrDefaultAsync(a => a.Id == auctionId, ct)
                       ?? throw new KeyNotFoundException($"Auction {auctionId} not found.");
@@ -269,13 +275,22 @@ public sealed class AuctionService(IDbContextFactory<ApplicationDbContext> dbFac
         {
             var now = clock.GetUtcNow().UtcDateTime;
             var expired = await db.Auctions.Where(a => a.Status == AuctionStatus.Active && a.EndsAtUtc <= now).ToListAsync(ct);
+            if (expired.Count == 0)
+                return 0;
+
+            // One query for every expired auction's bids, not one per auction.
+            var expiredIds = expired.Select(a => a.Id).ToList();
+            var bids = await db.Bids
+                .Where(b => expiredIds.Contains(b.AuctionId))
+                .Join(db.Users, b => b.BidderId, u => u.Id, (b, u) => new { b.AuctionId, b.BidderId, b.AmountCents, b.CreatedAtUtc, u.DisplayName })
+                .ToListAsync(ct);
+            var topBids = bids
+                .GroupBy(b => b.AuctionId)
+                .ToDictionary(g => g.Key, g => g.OrderByDescending(b => b.AmountCents).ThenBy(b => b.CreatedAtUtc).First());
 
             foreach (var auction in expired)
             {
-                var top = await db.Bids.Where(b => b.AuctionId == auction.Id)
-                    .OrderByDescending(b => b.AmountCents).ThenBy(b => b.CreatedAtUtc)
-                    .Join(db.Users, b => b.BidderId, u => u.Id, (b, u) => new { b.BidderId, b.AmountCents, u.DisplayName })
-                    .FirstOrDefaultAsync(ct);
+                var top = topBids.GetValueOrDefault(auction.Id);
 
                 auction.Status = AuctionStatus.Ended;
                 auction.WinnerId = top?.BidderId;

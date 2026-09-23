@@ -1,0 +1,41 @@
+# Render Blueprint: a Docker web service plus a PostgreSQL database.
+# In Render: New → Blueprint → pick this repository. Fill in the values marked sync: false when asked.
+# Plans and regions are left to Render's defaults; set them in the dashboard. See DEPLOY.md.
+
+databases:
+  - name: maroos-db
+    databaseName: maroos
+    user: maroos
+
+services:
+  - type: web
+    name: maroos
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: ConnectionStrings__DefaultConnection
+        fromDatabase:
+          name: maroos-db
+          property: connectionString
+      - key: Database__MigrateOnStartup
+        value: "true"
+      # Render terminates HTTPS in front of the app; trust its X-Forwarded-* headers.
+      - key: ASPNETCORE_FORWARDEDHEADERS_ENABLED
+        value: "true"
+      # Photos: any S3-compatible bucket (AWS S3, Cloudflare R2, Backblaze B2).
+      - key: Uploads__S3__Bucket
+        sync: false
+      - key: Uploads__S3__ServiceUrl
+        sync: false
+      - key: Uploads__S3__Region
+        sync: false
+      - key: Uploads__S3__AccessKey
+        sync: false
+      - key: Uploads__S3__SecretKey
+        sync: false
+      # Optional GitHub login; leave empty to offer email/password only.
+      - key: GitHub__ClientId
+        sync: false
+      - key: GitHub__ClientSecret
+        sync: false

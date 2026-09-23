@@ -5,6 +5,7 @@ using Maroos.Core.Scryfall;
 using Maroos.Web.Data;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 
 namespace Maroos.Tests.Scryfall;
 
@@ -105,10 +106,10 @@ public sealed class TestDb : IDbContextFactory<ApplicationDbContext>, IDisposabl
     private readonly SqliteConnection _connection = new("DataSource=:memory:");
     private readonly DbContextOptions<ApplicationDbContext> _options;
 
-    public TestDb()
+    public TestDb(params IInterceptor[] interceptors)
     {
         _connection.Open();
-        _options = new DbContextOptionsBuilder<ApplicationDbContext>().UseSqlite(_connection).Options;
+        _options = new DbContextOptionsBuilder<ApplicationDbContext>().UseSqlite(_connection).AddInterceptors(interceptors).Options;
         using var db = CreateDbContext();
         db.Database.EnsureCreated();
     }
@@ -116,4 +117,41 @@ public sealed class TestDb : IDbContextFactory<ApplicationDbContext>, IDisposabl
     public ApplicationDbContext CreateDbContext() => new(_options);
 
     public void Dispose() => _connection.Dispose();
+}
+
+/// <summary>
+/// Counts SELECT queries sent to the database, to catch one-query-per-row pages. (Writes are left out:
+/// SQLite sends each UPDATE separately, while PostgreSQL batches them.)
+/// </summary>
+public sealed class QueryCounter : DbCommandInterceptor
+{
+    private int _count;
+
+    public int Count => _count;
+
+    public void Reset() => Interlocked.Exchange(ref _count, 0);
+
+    private void Track(System.Data.Common.DbCommand command)
+    {
+        if (command.CommandText.TrimStart().StartsWith("SELECT", StringComparison.OrdinalIgnoreCase))
+            Interlocked.Increment(ref _count);
+    }
+
+    public override InterceptionResult<System.Data.Common.DbDataReader> ReaderExecuting(System.Data.Common.DbCommand command, CommandEventData eventData, InterceptionResult<System.Data.Common.DbDataReader> result)
+    {
+        Track(command);
+        return result;
+    }
+
+    public override ValueTask<InterceptionResult<System.Data.Common.DbDataReader>> ReaderExecutingAsync(System.Data.Common.DbCommand command, CommandEventData eventData, InterceptionResult<System.Data.Common.DbDataReader> result, CancellationToken cancellationToken = default)
+    {
+        Track(command);
+        return ValueTask.FromResult(result);
+    }
+
+    public override ValueTask<InterceptionResult<object>> ScalarExecutingAsync(System.Data.Common.DbCommand command, CommandEventData eventData, InterceptionResult<object> result, CancellationToken cancellationToken = default)
+    {
+        Track(command);
+        return ValueTask.FromResult(result);
+    }
 }

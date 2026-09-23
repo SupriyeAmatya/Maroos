@@ -3,7 +3,7 @@ using Maroos.Web.Services;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.FileProviders;
+using Microsoft.AspNetCore.DataProtection;
 using Maroos.Web.Components;
 using Maroos.Web.Components.Account;
 using Maroos.Web.Data;
@@ -39,12 +39,17 @@ if (!string.IsNullOrEmpty(gitHubClientId) && !string.IsNullOrEmpty(gitHubClientS
 
 authBuilder.AddIdentityCookies();
 
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
-// The factory lets interactive components create a short-lived DbContext per operation; it also
-// registers ApplicationDbContext as scoped for Identity.
-builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
-    options.UseSqlite(connectionString));
+// SQLite in development, PostgreSQL in production (Database:Provider). The factory lets interactive components
+// create a short-lived DbContext per operation; ApplicationDbContext is also registered as scoped for Identity.
+builder.Services.AddMaroosDatabase(builder.Configuration, builder.Environment);
 builder.Services.AddDatabaseDeveloperPageExceptionFilter();
+
+// Login cookies are signed with Data Protection keys; keep them in the database so they survive redeploys.
+builder.Services.AddDataProtection()
+    .SetApplicationName("Maroos")
+    .PersistKeysToDbContext<ApplicationDbContext>();
+
+builder.Services.AddHealthChecks().AddDbContextCheck<ApplicationDbContext>("database");
 
 // Card data: Scryfall through one throttled client, then the DB/memory cache in CardService.
 builder.Services.AddSingleton(TimeProvider.System);
@@ -65,9 +70,20 @@ builder.Services.AddSignalR();
 builder.Services.AddSingleton<AuctionEvents>();
 builder.Services.AddHostedService<AuctionCloser>();
 
-// Auction photos: saved re-encoded under Uploads:Path and served at Uploads:RequestPath.
-var photoOptions = builder.Configuration.GetSection("Uploads").Get<PhotoStorageOptions>() ?? new PhotoStorageOptions();
+// Auction photos: re-encoded, then stored on disk (Uploads:Storage=Local) or in an S3-compatible bucket (S3).
+var photoOptions = PhotoStorageOptions.From(builder.Configuration);
 builder.Services.AddSingleton(photoOptions);
+if (photoOptions.Storage.Equals("S3", StringComparison.OrdinalIgnoreCase))
+{
+    if (string.IsNullOrWhiteSpace(photoOptions.S3.Bucket))
+        throw new InvalidOperationException("Uploads:Storage is S3 but no bucket is set (Uploads__S3__Bucket or BUCKET_NAME).");
+    builder.Services.AddSingleton(S3PhotoBlobStore.CreateClient(photoOptions.S3));
+    builder.Services.AddSingleton<IPhotoBlobStore>(sp => new S3PhotoBlobStore(sp.GetRequiredService<Amazon.S3.IAmazonS3>(), photoOptions.S3));
+}
+else
+{
+    builder.Services.AddSingleton<IPhotoBlobStore>(new LocalPhotoBlobStore(Path.Combine(builder.Environment.ContentRootPath, photoOptions.Path)));
+}
 builder.Services.AddSingleton<AuctionPhotoStore>();
 
 builder.Services.AddIdentityCore<ApplicationUser>(options =>
@@ -89,6 +105,19 @@ builder.Services.AddSingleton<IEmailSender<ApplicationUser>, IdentityNoOpEmailSe
 
 var app = builder.Build();
 
+await app.MigrateIfConfiguredAsync();
+
+app.Use(async (context, next) =>
+{
+    // Basic hardening for every response. Blazor sends the frame-ancestors CSP itself (configured below).
+    var headers = context.Response.Headers;
+    headers.XContentTypeOptions = "nosniff";
+    headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
+    headers["X-Frame-Options"] = "DENY";
+    headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()";
+    await next();
+});
+
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
@@ -107,21 +136,19 @@ app.UseAntiforgery();
 
 app.MapStaticAssets();
 
-// MapStaticAssets only serves files that exist at build time; uploaded photos need their own mapping.
-var photoStore = app.Services.GetRequiredService<AuctionPhotoStore>();
-Directory.CreateDirectory(photoStore.Root);
-app.UseStaticFiles(new StaticFileOptions
+// Auction photos, from disk or the S3 bucket. Keys are random and never reused, so they cache forever.
+app.MapGet("/uploads/{key}", async (string key, AuctionPhotoStore photos, HttpContext context, CancellationToken ct) =>
 {
-    FileProvider = new PhysicalFileProvider(photoStore.Root),
-    RequestPath = photoOptions.RequestPath,
-    OnPrepareResponse = context =>
-    {
-        context.Context.Response.Headers.XContentTypeOptions = "nosniff";
-        context.Context.Response.Headers.CacheControl = "public, max-age=604800";
-    },
+    var photo = await photos.OpenAsync(key, ct);
+    if (photo is null)
+        return Results.NotFound();
+    context.Response.Headers.CacheControl = "public, max-age=31536000, immutable";
+    return Results.Stream(photo, "image/jpeg");
 });
+
+app.MapHealthChecks("/health");
 app.MapRazorComponents<App>()
-    .AddInteractiveServerRenderMode();
+    .AddInteractiveServerRenderMode(options => options.ContentSecurityFrameAncestorsPolicy = "'none'");
 
 app.MapHub<AuctionHub>(AuctionHub.Path);
 

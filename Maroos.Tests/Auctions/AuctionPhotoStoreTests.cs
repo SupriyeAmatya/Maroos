@@ -1,7 +1,5 @@
 using System.Text;
 using Maroos.Web.Services;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.Extensions.FileProviders;
 using SkiaSharp;
 
 namespace Maroos.Tests.Auctions;
@@ -11,8 +9,7 @@ public sealed class AuctionPhotoStoreTests : IDisposable
     private readonly string _root = Path.Combine(Path.GetTempPath(), $"maroos-photos-{Guid.NewGuid():N}");
     private readonly AuctionPhotoStore _store;
 
-    public AuctionPhotoStoreTests() =>
-        _store = new AuctionPhotoStore(new PhotoStorageOptions { Path = _root, RequestPath = "/uploads" }, new TestEnvironment());
+    public AuctionPhotoStoreTests() => _store = new AuctionPhotoStore(new LocalPhotoBlobStore(_root));
 
     public void Dispose()
     {
@@ -123,18 +120,40 @@ public sealed class AuctionPhotoStoreTests : IDisposable
     public async Task Delete_removes_saved_photos_but_ignores_other_paths()
     {
         var path = await _store.SaveAsync(new MemoryStream(Image(10, 10, SKEncodedImageFormat.Png)));
-        var outside = Path.Combine(_root, "..", $"keep-{Guid.NewGuid():N}.jpg");
+        var outsideName = $"{Guid.NewGuid():N}.jpg";
+        var outside = Path.Combine(_root, "..", outsideName);
         await File.WriteAllTextAsync(outside, "keep me");
 
-        _store.Delete($"uploads/../{Path.GetFileName(outside)}");
-        _store.Delete("uploads/");
-        _store.Delete("https://example.com/a.jpg");
-        _store.Delete(null);
+        await _store.DeleteAsync($"uploads/../{outsideName}");
+        await _store.DeleteAsync("uploads/");
+        await _store.DeleteAsync("https://example.com/a.jpg");
+        await _store.DeleteAsync(null);
         Assert.True(File.Exists(outside));
         File.Delete(outside);
 
-        _store.Delete(path);
+        await _store.DeleteAsync(path);
         Assert.False(File.Exists(FileFor(path)));
+    }
+
+    [Theory]
+    [InlineData("../secret.jpg")]
+    [InlineData("..%2Fsecret.jpg")]
+    [InlineData("0123456789abcdef0123456789abcdef.png")]
+    [InlineData("0123456789ABCDEF0123456789ABCDEF.jpg")]
+    [InlineData("web.config")]
+    public async Task Open_only_serves_keys_it_generated(string key)
+    {
+        Assert.Null(await _store.OpenAsync(key));
+    }
+
+    [Fact]
+    public async Task Open_returns_a_saved_photo()
+    {
+        var path = await _store.SaveAsync(new MemoryStream(Image(10, 10, SKEncodedImageFormat.Png)));
+
+        await using var photo = await _store.OpenAsync(path["uploads/".Length..]);
+        Assert.NotNull(photo);
+        Assert.Equal(0xFF, photo!.ReadByte());
     }
 
     [Theory]
@@ -158,15 +177,5 @@ public sealed class AuctionPhotoStoreTests : IDisposable
     {
         Assert.Equal((20, 40), AuctionPhotoStore.OrientedSize(SKEncodedOrigin.RightTop, 40, 20));
         Assert.Equal((40, 20), AuctionPhotoStore.OrientedSize(SKEncodedOrigin.BottomRight, 40, 20));
-    }
-
-    private sealed class TestEnvironment : IWebHostEnvironment
-    {
-        public string WebRootPath { get; set; } = Path.GetTempPath();
-        public IFileProvider WebRootFileProvider { get; set; } = new NullFileProvider();
-        public string ApplicationName { get; set; } = "Maroos.Tests";
-        public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
-        public string ContentRootPath { get; set; } = Path.GetTempPath();
-        public string EnvironmentName { get; set; } = "Test";
     }
 }

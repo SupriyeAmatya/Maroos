@@ -2,19 +2,36 @@ using Maroos.Core.Auctions;
 using Maroos.Core.Decks;
 using Maroos.Core.Scryfall;
 using Maroos.Core.Watchlist;
+using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
 namespace Maroos.Web.Data;
 
-public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : IdentityDbContext<ApplicationUser>(options)
+/// <summary>
+/// The app's database. Its migrations (Data/Migrations) are for SQLite; <see cref="PostgresDbContext"/> has the
+/// same model with its own PostgreSQL migrations.
+/// </summary>
+public class ApplicationDbContext : IdentityDbContext<ApplicationUser>, IDataProtectionKeyContext
 {
+    public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : base(options)
+    {
+    }
+
+    /// <summary>For provider-specific subclasses such as <see cref="PostgresDbContext"/>.</summary>
+    protected ApplicationDbContext(DbContextOptions options) : base(options)
+    {
+    }
+
     public DbSet<CachedCard> CachedCards => Set<CachedCard>();
     public DbSet<Deck> Decks => Set<Deck>();
     public DbSet<DeckCard> DeckCards => Set<DeckCard>();
     public DbSet<Auction> Auctions => Set<Auction>();
     public DbSet<Bid> Bids => Set<Bid>();
     public DbSet<Watch> Watches => Set<Watch>();
+
+    /// <summary>ASP.NET Core Data Protection keys (they sign login cookies), so they survive redeploys.</summary>
+    public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -82,3 +99,6 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         });
     }
 }
+
+/// <summary>The same model on PostgreSQL, with its own migrations in Data/Migrations/Postgres.</summary>
+public sealed class PostgresDbContext(DbContextOptions<PostgresDbContext> options) : ApplicationDbContext(options);

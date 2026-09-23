@@ -1,30 +1,29 @@
+using System.Text.RegularExpressions;
 using SkiaSharp;
 
 namespace Maroos.Web.Services;
-
-public sealed class PhotoStorageOptions
-{
-    /// <summary>Folder for uploaded photos; relative paths are under the content root.</summary>
-    public string Path { get; set; } = "wwwroot/uploads";
-
-    /// <summary>URL prefix the photos are served from.</summary>
-    public string RequestPath { get; set; } = "/uploads";
-}
 
 public sealed class PhotoRejectedException(string message) : Exception(message);
 
 /// <summary>
 /// Saves auction photos. Every upload is decoded and re-encoded as a JPEG, which drops EXIF metadata
 /// (phone photos carry GPS location), turns rotated phone photos upright, shrinks very large images,
-/// and rejects anything that isn't really a JPG or PNG.
+/// and rejects anything that isn't really a JPG or PNG. The bytes go to an <see cref="IPhotoBlobStore"/>
+/// (disk in development, an S3 bucket in production); the app serves them at <c>/uploads/{key}</c>,
+/// so stored paths are the same whatever the backend.
 /// </summary>
-public sealed class AuctionPhotoStore(PhotoStorageOptions options, IWebHostEnvironment env)
+public sealed partial class AuctionPhotoStore(IPhotoBlobStore blobs)
 {
     public const long MaxUploadBytes = 5 * 1024 * 1024;
     public const int MaxDimension = 1600;
+    public const string UrlPrefix = "uploads/";
     public static readonly IReadOnlyList<string> AcceptedTypes = ["image/jpeg", "image/png"];
 
-    public string Root => System.IO.Path.GetFullPath(System.IO.Path.Combine(env.ContentRootPath, options.Path));
+    /// <summary>Only keys this class generates: 32 hex characters and ".jpg". Nothing else is ever read or deleted.</summary>
+    [GeneratedRegex("^[0-9a-f]{32}\\.jpg$")]
+    private static partial Regex KeyPattern();
+
+    public static bool IsValidKey(string? key) => key is not null && KeyPattern().IsMatch(key);
 
     /// <summary>Stores the photo and returns its site-relative URL, e.g. <c>uploads/3f2c….jpg</c>.</summary>
     public async Task<string> SaveAsync(Stream upload, CancellationToken ct = default)
@@ -34,26 +33,23 @@ public sealed class AuctionPhotoStore(PhotoStorageOptions options, IWebHostEnvir
             throw new PhotoRejectedException("Upload a JPG or PNG photo.");
 
         var jpeg = Normalize(bytes);
-
-        Directory.CreateDirectory(Root);
-        var fileName = $"{Guid.NewGuid():N}.jpg";
-        await File.WriteAllBytesAsync(System.IO.Path.Combine(Root, fileName), jpeg, ct);
-        return $"{options.RequestPath.Trim('/')}/{fileName}";
+        var key = $"{Guid.NewGuid():N}.jpg";
+        await blobs.PutAsync(key, jpeg, ct);
+        return UrlPrefix + key;
     }
 
+    /// <summary>The photo for a key from a <c>/uploads/{key}</c> URL, or null if it's not one of ours.</summary>
+    public Task<Stream?> OpenAsync(string key, CancellationToken ct = default) =>
+        IsValidKey(key) ? blobs.OpenReadAsync(key, ct) : Task.FromResult<Stream?>(null);
+
     /// <summary>Deletes a photo saved by <see cref="SaveAsync"/>; ignores anything else.</summary>
-    public void Delete(string? photoPath)
+    public async Task DeleteAsync(string? photoPath, CancellationToken ct = default)
     {
-        var prefix = options.RequestPath.Trim('/') + "/";
-        if (photoPath is null || !photoPath.StartsWith(prefix, StringComparison.Ordinal))
+        if (photoPath is null || !photoPath.StartsWith(UrlPrefix, StringComparison.Ordinal))
             return;
-
-        // Only a bare file name we generated: never follow "..", slashes or anything else from the path.
-        var fileName = photoPath[prefix.Length..];
-        if (fileName != System.IO.Path.GetFileName(fileName) || !fileName.EndsWith(".jpg", StringComparison.Ordinal))
-            return;
-
-        File.Delete(System.IO.Path.Combine(Root, fileName));
+        var key = photoPath[UrlPrefix.Length..];
+        if (IsValidKey(key))
+            await blobs.DeleteAsync(key, ct);
     }
 
     private static async Task<byte[]> ReadLimitedAsync(Stream upload, CancellationToken ct)

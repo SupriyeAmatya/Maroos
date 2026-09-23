@@ -1,7 +1,77 @@
 @page "/"
 
-<PageTitle>Maroos</PageTitle>
+@inject AuctionService AuctionService
+@inject TimeProvider Clock
 
-<h1>Maroos</h1>
+<PageTitle>Maroos · Magic decks and card auctions</PageTitle>
 
-<p>Build Magic: The Gathering decks and bid on cards in the auction house.</p>
+<section class="home-hero mb-4">
+    <h1>Maroos</h1>
+    <p class="lead mb-3">Build Magic: The Gathering decks, check them against your format, and bid on cards other players are selling.</p>
+    <form class="home-search" method="get" action="search" role="search">
+        <div class="input-group input-group-lg">
+            <input name="q" class="form-control" aria-label="Search for a card" placeholder="Search for a card, e.g. Lightning Bolt" />
+            <button class="btn btn-primary" type="submit">Search</button>
+        </div>
+    </form>
+</section>
+
+<div class="home-links mb-5">
+    <a class="card card-body home-link" href="decks/new">
+        <span class="h5 mb-1">Build a deck</span>
+        <span class="text-muted small">Paste a list from Moxfield or Arena, see the mana curve, colors, price and what's not legal.</span>
+    </a>
+    <a class="card card-body home-link" href="auctions">
+        <span class="h5 mb-1">Browse auctions</span>
+        <span class="text-muted small">Bid live on single cards. Winners and sellers settle directly.</span>
+    </a>
+    <a class="card card-body home-link" href="auctions/new">
+        <span class="h5 mb-1">Sell a card</span>
+        <span class="text-muted small">List a printing with a photo, a starting price and up to 7 days to run.</span>
+    </a>
+</div>
+
+@if (endingSoon.Count > 0)
+{
+    <section aria-labelledby="ending-soon-heading">
+        <div class="d-flex justify-content-between align-items-baseline mb-2">
+            <h2 id="ending-soon-heading" class="h4 mb-0">Ending soon</h2>
+            <a href="auctions">All auctions</a>
+        </div>
+        <div class="auction-grid">
+            @foreach (var auction in endingSoon)
+            {
+                <a class="auction-tile card" href="auctions/@auction.Id">
+                    <div class="auction-tile-image">
+                        @if (auction.ImageUrl is { } image)
+                        {
+                            <img src="@image" alt="@auction.CardName" loading="lazy" />
+                        }
+                        else
+                        {
+                            <span class="card-grid-placeholder">@auction.CardName</span>
+                        }
+                    </div>
+                    <div class="card-body p-2">
+                        <div class="auction-tile-name">@auction.CardName</div>
+                        <div class="d-flex justify-content-between align-items-baseline mt-1">
+                            <span class="auction-tile-price">@Money.FormatUsd(auction.CurrentCents)</span>
+                            <span class="auction-tile-time">@AuctionRules.TimeLeft(now, auction.EndsAtUtc) left</span>
+                        </div>
+                    </div>
+                </a>
+            }
+        </div>
+    </section>
+}
+
+@code {
+    private IReadOnlyList<AuctionSummary> endingSoon = [];
+    private DateTime now;
+
+    protected override async Task OnInitializedAsync()
+    {
+        now = Clock.GetUtcNow().UtcDateTime;
+        endingSoon = (await AuctionService.ListAsync(new AuctionFilter())).Take(6).ToList();
+    }
+}

@@ -39,6 +39,9 @@ public sealed class BiddingService(
 
     public async Task<BidResult> PlaceBidAsync(Guid auctionId, string bidderId, long amountCents, CancellationToken ct = default)
     {
+        if (string.IsNullOrEmpty(bidderId))
+            return BidResult.Rejected("Log in to bid.");
+
         for (var attempt = 1; ; attempt++)
         {
             try

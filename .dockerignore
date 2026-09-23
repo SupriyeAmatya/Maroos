@@ -1,0 +1,15 @@
+**/bin/
+**/obj/
+**/.vs/
+**/.vscode/
+**/*.user
+.git/
+Maroos.Tests/
+
+# Local data never goes into the image.
+**/*.db
+**/*.db-shm
+**/*.db-wal
+Maroos.Web/wwwroot/uploads/
+**/appsettings.Development.json
+**/secrets.json

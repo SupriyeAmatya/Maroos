@@ -8,11 +8,9 @@ using Maroos.Web.Services;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.AspNetCore.Components.Web;
-using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Logging.Abstractions;
 using SkiaSharp;
 
@@ -37,7 +35,7 @@ public sealed class AuctionPagesTests : BunitContext
         Services.AddSingleton(new BiddingService(_db, events, TimeProvider.System, NullLogger<BiddingService>.Instance));
         Services.AddSingleton(new WatchService(_db, TimeProvider.System));
         Services.AddSingleton<TimeProvider>(TimeProvider.System);
-        Services.AddSingleton(new AuctionPhotoStore(new PhotoStorageOptions { Path = _photoRoot }, new TestEnvironment()));
+        Services.AddSingleton(new AuctionPhotoStore(new LocalPhotoBlobStore(_photoRoot)));
 
         _seller = AddUser("seller@example.com", "Card Shark");
         _bob = AddUser("bob@example.com", "Bob");
@@ -196,15 +194,5 @@ public sealed class AuctionPagesTests : BunitContext
         page.WaitForAssertion(() => Assert.Contains("Auction cancelled.", page.Markup));
         Assert.Equal("Cancelled", page.Find("h1 + .badge, .badge").TextContent.Trim());
         Assert.Equal(AuctionStatus.Cancelled, Assert.Single(SavedAuctions()).Status);
-    }
-
-    private sealed class TestEnvironment : IWebHostEnvironment
-    {
-        public string WebRootPath { get; set; } = Path.GetTempPath();
-        public IFileProvider WebRootFileProvider { get; set; } = new NullFileProvider();
-        public string ApplicationName { get; set; } = "Maroos.Tests";
-        public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
-        public string ContentRootPath { get; set; } = Path.GetTempPath();
-        public string EnvironmentName { get; set; } = "Test";
     }
 }

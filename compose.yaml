@@ -1,0 +1,71 @@
+# A production-like Maroos on your machine: PostgreSQL, an S3-compatible bucket (MinIO) and the app image.
+#
+#   docker compose up --build        then open http://localhost:8080
+#   docker compose down -v           stop and delete the local data
+#
+# The database and bucket also back the integration tests:
+#   docker compose up -d db s3 s3-bucket
+#   MAROOS_TEST_POSTGRES="Host=localhost;Port=5433;Username=postgres;Password=maroos-local"
+#   MAROOS_TEST_S3_URL=http://localhost:9000 MAROOS_TEST_S3_BUCKET=maroos-photos
+#   MAROOS_TEST_S3_ACCESS_KEY=maroos MAROOS_TEST_S3_SECRET_KEY=maroos-local-secret
+#   dotnet test Maroos.slnx
+#
+# These passwords are for local testing only.
+
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_PASSWORD: maroos-local
+      POSTGRES_DB: maroos
+    ports:
+      - "5433:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  s3:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: maroos
+      MINIO_ROOT_PASSWORD: maroos-local-secret
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - s3-data:/data
+
+  s3-bucket:
+    image: minio/mc:RELEASE.2025-04-16T18-13-26Z
+    depends_on:
+      - s3
+    entrypoint: >
+      sh -c "until mc alias set local http://s3:9000 maroos maroos-local-secret; do sleep 1; done
+      && mc mb --ignore-existing local/maroos-photos"
+
+  web:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      ConnectionStrings__DefaultConnection: "Host=db;Database=maroos;Username=postgres;Password=maroos-local"
+      Database__MigrateOnStartup: "true"
+      Uploads__S3__ServiceUrl: "http://s3:9000"
+      Uploads__S3__Bucket: "maroos-photos"
+      Uploads__S3__AccessKey: "maroos"
+      Uploads__S3__SecretKey: "maroos-local-secret"
+      Uploads__S3__ForcePathStyle: "true"
+    depends_on:
+      db:
+        condition: service_healthy
+      s3-bucket:
+        condition: service_completed_successfully
+
+volumes:
+  db-data:
+  s3-data:

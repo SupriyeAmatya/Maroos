@@ -43,6 +43,9 @@ public sealed class DeckService(IDbContextFactory<ApplicationDbContext> dbFactor
 
     public async Task<Deck> CreateAsync(string ownerId, string name, string format, bool isPublic = false, CancellationToken ct = default)
     {
+        if (string.IsNullOrEmpty(ownerId))
+            throw new DeckAccessException();
+
         var now = clock.GetUtcNow().UtcDateTime;
         var deck = new Deck
         {
@@ -214,6 +217,10 @@ public sealed class DeckService(IDbContextFactory<ApplicationDbContext> dbFactor
 
     private static async Task<Deck> LoadOwnedAsync(ApplicationDbContext db, Guid deckId, string ownerId, CancellationToken ct)
     {
+        // Pages only show edit controls to the owner; this refuses anyone else, including signed-out callers.
+        if (string.IsNullOrEmpty(ownerId))
+            throw new DeckAccessException();
+
         var deck = await db.Decks.Include(d => d.Cards).FirstOrDefaultAsync(d => d.Id == deckId, ct)
                    ?? throw new KeyNotFoundException($"Deck {deckId} not found.");
         if (deck.OwnerId != ownerId)

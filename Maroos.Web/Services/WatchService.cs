@@ -23,6 +23,9 @@ public sealed class WatchService(IDbContextFactory<ApplicationDbContext> dbFacto
     /// <summary>Adds or removes the target; returns whether it's watched afterwards.</summary>
     public async Task<bool> ToggleAsync(string userId, WatchTarget type, Guid targetId, CancellationToken ct = default)
     {
+        if (string.IsNullOrEmpty(userId))
+            throw new UnauthorizedAccessException("Log in to use your watchlist.");
+
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         var existing = await db.Watches.FirstOrDefaultAsync(w => w.UserId == userId && w.TargetType == type && w.TargetId == targetId, ct);
         if (existing is not null)
