@@ -1,3 +1,5 @@
+using Maroos.Core.Scryfall;
+using Maroos.Web.Services;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -37,9 +39,23 @@ if (!string.IsNullOrEmpty(gitHubClientId) && !string.IsNullOrEmpty(gitHubClientS
 authBuilder.AddIdentityCookies();
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
-builder.Services.AddDbContext<ApplicationDbContext>(options =>
+// The factory lets interactive components create a short-lived DbContext per operation; it also
+// registers ApplicationDbContext as scoped for Identity.
+builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
     options.UseSqlite(connectionString));
 builder.Services.AddDatabaseDeveloperPageExceptionFilter();
+
+// Card data: Scryfall through one throttled client, then the DB/memory cache in CardService.
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddMemoryCache();
+builder.Services.AddSingleton<ScryfallThrottle>();
+builder.Services.AddHttpClient<ScryfallClient>(client =>
+{
+    client.BaseAddress = new Uri("https://api.scryfall.com/");
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("Maroos/0.1");
+    client.DefaultRequestHeaders.Accept.ParseAdd("application/json");
+});
+builder.Services.AddScoped<CardService>();
 
 builder.Services.AddIdentityCore<ApplicationUser>(options =>
     {

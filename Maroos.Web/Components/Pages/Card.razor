@@ -1,0 +1,88 @@
+@page "/card/{Id:guid}"
+
+@inject CardService Cards
+
+@if (card is null)
+{
+    <PageTitle>Card not found · Maroos</PageTitle>
+    <h1>Card not found</h1>
+    <p>Scryfall has no card with that id. <a href="search">Search for a card</a>.</p>
+}
+else
+{
+<PageTitle>@card.Name · Maroos</PageTitle>
+
+<div class="card-detail">
+    <div class="card-detail-images">
+        @foreach (var image in Images)
+        {
+            <img src="@image.Url" alt="@image.Name" />
+        }
+    </div>
+
+    <div class="card-detail-info">
+        @foreach (var face in Faces)
+        {
+            <section class="card-face">
+                <h1 class="h3 d-flex flex-wrap align-items-center gap-2">
+                    <span>@face.Name</span>
+                    @if (!string.IsNullOrEmpty(face.ManaCost))
+                    {
+                        <span class="fs-5"><ManaText Text="@face.ManaCost" /></span>
+                    }
+                </h1>
+                <p class="text-muted mb-2">@face.TypeLine</p>
+                @if (!string.IsNullOrEmpty(face.OracleText))
+                {
+                    <p class="oracle-text"><ManaText Text="@face.OracleText" /></p>
+                }
+            </section>
+        }
+
+        <p class="text-muted small">@card.SetName (@card.Set.ToUpperInvariant()) #@card.CollectorNumber</p>
+
+        <h2 class="h5 mt-4">Price</h2>
+        <dl class="row mb-0">
+            <dt class="col-4">USD</dt>
+            <dd class="col-8">@Money.FormatUsd(card.Prices.UsdCents)</dd>
+            <dt class="col-4">USD foil</dt>
+            <dd class="col-8">@Money.FormatUsd(card.Prices.UsdFoilCents)</dd>
+        </dl>
+        <p class="small text-muted">Prices from Scryfall, updated daily.</p>
+
+        <h2 class="h5 mt-4">Format legality</h2>
+        <table class="table table-sm legality-table">
+            <tbody>
+                @foreach (var (format, legality) in card.Legalities.OrderBy(l => Formats.DisplayName(l.Key)))
+                {
+                    <tr>
+                        <th scope="row">@Formats.DisplayName(format)</th>
+                        <td><span class="badge legality-@legality">@Formats.LegalityLabel(legality)</span></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+
+        <p class="small"><a href="https://scryfall.com/card/@card.Set/@card.CollectorNumber" target="_blank" rel="noopener">View on Scryfall</a></p>
+    </div>
+</div>
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private ScryfallCard? card;
+
+    protected override async Task OnParametersSetAsync() => card = await Cards.GetCardAsync(Id);
+
+    /// <summary>Double-faced cards show every face; single-faced cards show the card itself.</summary>
+    private IEnumerable<ScryfallCardFace> Faces =>
+        card!.CardFaces is { Count: > 0 } faces
+            ? faces
+            : [new ScryfallCardFace(card.Name, card.ManaCost, card.TypeLine, card.OracleText, card.ImageUris)];
+
+    private IEnumerable<(string Url, string Name)> Images =>
+        card!.ImageUris?.Normal is { } single
+            ? [(single, card.Name)]
+            : Faces.Where(f => f.ImageUris?.Normal is not null).Select(f => (f.ImageUris!.Normal!, f.Name));
+}

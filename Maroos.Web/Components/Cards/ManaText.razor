@@ -1,0 +1,25 @@
+@* Renders text with {X} mana/tap symbols as Scryfall's SVG icons; newlines become line breaks. *@
+
+@{ var lines = (Text ?? "").Split('\n'); }
+@for (var i = 0; i < lines.Length; i++)
+{
+    if (i > 0)
+    {
+        <br />
+    }
+    foreach (var token in ManaSymbols.Tokenize(lines[i]))
+    {
+        if (token.IsSymbol)
+        {
+            <img class="mana-symbol" src="@ManaSymbols.SvgUrl(token.Text)" alt="{@token.Text}" title="{@token.Text}" />
+        }
+        else
+        {
+            @token.Text
+        }
+    }
+}
+
+@code {
+    [Parameter] public string? Text { get; set; }
+}
