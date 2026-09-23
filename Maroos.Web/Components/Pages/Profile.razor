@@ -1,0 +1,13 @@
+@page "/profile"
+
+@using Microsoft.AspNetCore.Authorization
+
+@attribute [Authorize]
+
+<PageTitle>Profile · Maroos</PageTitle>
+
+<h1>Profile</h1>
+
+<AuthorizeView>
+    <p>Signed in as @context.User.Identity?.Name. Decks, listings, bids and watchlist arrive in Phase 6.</p>
+</AuthorizeView>
