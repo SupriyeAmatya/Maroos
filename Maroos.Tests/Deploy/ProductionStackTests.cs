@@ -177,7 +177,7 @@ public sealed class PostgresTests : IDisposable
 }
 
 /// <summary>
-/// Photos in a real S3-compatible bucket (MinIO in compose.yaml). Needs MAROOS_TEST_S3_URL, MAROOS_TEST_S3_ACCESS_KEY,
+/// Photos in a real S3-compatible bucket (the Versity S3 gateway in compose.yaml). Needs MAROOS_TEST_S3_URL, MAROOS_TEST_S3_ACCESS_KEY,
 /// MAROOS_TEST_S3_SECRET_KEY and MAROOS_TEST_S3_BUCKET; skips without them.
 /// </summary>
 public class S3PhotoStorageTests

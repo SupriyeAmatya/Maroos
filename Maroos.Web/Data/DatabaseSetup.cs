@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Npgsql;
 
 namespace Maroos.Web.Data;
@@ -57,7 +59,7 @@ public static class DatabaseSetup
                 "Database:Provider is Postgres but ConnectionStrings:DefaultConnection is the SQLite default. " +
                 "Set ConnectionStrings__DefaultConnection (or DATABASE_URL) to your PostgreSQL connection string or postgres:// URL.");
 
-        var npgsql = ToNpgsqlConnectionString(connectionString);
+        var npgsql = WithoutKerberosProbe(ToNpgsqlConnectionString(connectionString));
         services.AddDbContextFactory<PostgresDbContext>(options => options.UseNpgsql(npgsql));
         services.AddSingleton<IDbContextFactory<ApplicationDbContext>>(sp =>
             new DerivedContextFactory<PostgresDbContext>(sp.GetRequiredService<IDbContextFactory<PostgresDbContext>>()));
@@ -97,20 +99,31 @@ public static class DatabaseSetup
         return builder.ConnectionString;
     }
 
+    /// <summary>
+    /// Npgsql tries GSS (Kerberos) encryption by default, which needs libgssapi — absent from the slim ASP.NET image,
+    /// so every connection logs an error. Maroos doesn't use Kerberos: turn it off unless the connection string asks for it.
+    /// </summary>
+    public static string WithoutKerberosProbe(string connectionString)
+    {
+        var builder = new NpgsqlConnectionStringBuilder(connectionString);
+        if (!connectionString.Contains("GSS", StringComparison.OrdinalIgnoreCase))
+            builder.GssEncryptionMode = GssEncryptionMode.Disable;
+        return builder.ConnectionString;
+    }
+
     /// <summary>Applies pending migrations at startup when <c>Database:MigrateOnStartup</c> is true (single-instance hosting).</summary>
     public static async Task MigrateIfConfiguredAsync(this WebApplication app)
     {
         if (!app.Configuration.GetValue<bool>("Database:MigrateOnStartup"))
             return;
 
+        // On an empty database EF reads the history table before creating it, which logs a harmless but alarming
+        // "Failed executing DbCommand". Creating the table first keeps a first deploy's log clean.
         await using var scope = app.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        var pending = (await db.Database.GetPendingMigrationsAsync()).ToList();
-        if (pending.Count > 0)
-        {
-            app.Logger.LogInformation("Applying {Count} database migration(s): {Migrations}", pending.Count, string.Join(", ", pending));
-            await db.Database.MigrateAsync();
-        }
+        await db.GetService<IHistoryRepository>().CreateIfNotExistsAsync();
+        await db.Database.MigrateAsync();
+        app.Logger.LogInformation("Database is up to date ({Count} migrations applied)", (await db.Database.GetAppliedMigrationsAsync()).Count());
     }
 
     private sealed class DerivedContextFactory<TContext>(IDbContextFactory<TContext> inner) : IDbContextFactory<ApplicationDbContext>

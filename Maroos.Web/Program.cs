@@ -130,7 +130,9 @@ else
     app.UseHsts();
 }
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
-app.UseHttpsRedirection();
+// In a container the host's proxy handles HTTPS (and redirects to it); the app itself only speaks HTTP on 8080.
+if (!app.Configuration.GetValue<bool>("DOTNET_RUNNING_IN_CONTAINER"))
+    app.UseHttpsRedirection();
 
 app.UseAntiforgery();
 

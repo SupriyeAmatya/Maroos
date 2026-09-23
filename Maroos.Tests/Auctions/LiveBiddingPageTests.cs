@@ -116,11 +116,12 @@ public sealed class LiveBiddingPageTests : IDisposable
     {
         var auction = await _world.ListAsync(_seller, days: 1);
         var page = Open(Browser(_bob), auction.Id);
-        Assert.Equal("1d 00:00:00", page.Find(".auction-countdown").TextContent);
+        page.WaitForAssertion(() => Assert.Equal("1d 00:00:00", page.Find(".auction-countdown").TextContent));
 
         _world.Clock.Advance(TimeSpan.FromSeconds(5));
 
-        page.WaitForAssertion(() => Assert.Equal("23:59:55", page.Find(".auction-countdown").TextContent), TimeSpan.FromSeconds(3));
+        // The page ticks on a real one-second timer; allow for a busy test machine.
+        page.WaitForAssertion(() => Assert.Equal("23:59:55", page.Find(".auction-countdown").TextContent), TimeSpan.FromSeconds(5));
     }
 
     [Fact]

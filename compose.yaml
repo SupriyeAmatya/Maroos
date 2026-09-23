@@ -1,4 +1,4 @@
-# A production-like Maroos on your machine: PostgreSQL, an S3-compatible bucket (MinIO) and the app image.
+# A production-like Maroos on your machine: PostgreSQL, an S3-compatible bucket (Versity S3 Gateway) and the app image.
 #
 #   docker compose up --build        then open http://localhost:8080
 #   docker compose down -v           stop and delete the local data
@@ -28,25 +28,30 @@ services:
       timeout: 5s
       retries: 30
 
+  # Any S3-compatible server works; Versity's gateway (Apache 2.0) stores objects in a local folder.
   s3:
-    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: maroos
-      MINIO_ROOT_PASSWORD: maroos-local-secret
+    image: versity/versitygw:v1.8.0
+    command: ["--access", "maroos", "--secret", "maroos-local-secret", "--port", ":9000", "posix", "/data"]
     ports:
       - "9000:9000"
-      - "9001:9001"
     volumes:
       - s3-data:/data
 
   s3-bucket:
-    image: minio/mc:RELEASE.2025-04-16T18-13-26Z
+    image: amazon/aws-cli:2.31.1
     depends_on:
       - s3
-    entrypoint: >
-      sh -c "until mc alias set local http://s3:9000 maroos maroos-local-secret; do sleep 1; done
-      && mc mb --ignore-existing local/maroos-photos"
+    environment:
+      AWS_ACCESS_KEY_ID: maroos
+      AWS_SECRET_ACCESS_KEY: maroos-local-secret
+      AWS_DEFAULT_REGION: us-east-1
+    entrypoint: ["sh", "-c"]
+    command:
+      - >-
+        for i in $$(seq 1 30); do
+        aws --endpoint-url http://s3:9000 s3api head-bucket --bucket maroos-photos 2>/dev/null && exit 0;
+        aws --endpoint-url http://s3:9000 s3api create-bucket --bucket maroos-photos && exit 0;
+        sleep 1; done; exit 1
 
   web:
     build: .

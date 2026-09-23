@@ -56,7 +56,7 @@ public sealed class CardPagesTests : BunitContext
         input.Input("lightning bolt");
         input.KeyDown(new KeyboardEventArgs { Key = "Enter" });
 
-        Assert.Equal("search?q=lightning%20bolt", navigation.ToBaseRelativePath(navigation.Uri));
+        page.WaitForAssertion(() => Assert.Equal("search?q=lightning%20bolt", navigation.ToBaseRelativePath(navigation.Uri)));
         page.WaitForAssertion(() => Assert.Equal(2, page.FindAll(".card-grid-item").Count));
     }
 
@@ -113,7 +113,7 @@ public sealed class CardPagesTests : BunitContext
         page.WaitForAssertion(() => Assert.NotEmpty(page.FindAll("#card-suggestions li")), TimeSpan.FromSeconds(2));
         page.Find("input[type=search]").KeyDown(new KeyboardEventArgs { Key = "Escape" });
 
-        Assert.Empty(page.FindAll("#card-suggestions"));
+        page.WaitForAssertion(() => Assert.Empty(page.FindAll("#card-suggestions")));
     }
 
     [Fact]

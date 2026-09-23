@@ -109,6 +109,15 @@ public class DatabaseSetupTests
     }
 
     [Fact]
+    public void Kerberos_probing_is_off_unless_asked_for()
+    {
+        Assert.Equal(GssEncryptionMode.Disable,
+            new NpgsqlConnectionStringBuilder(DatabaseSetup.WithoutKerberosProbe("Host=db;Database=maroos")).GssEncryptionMode);
+        Assert.Equal(GssEncryptionMode.Require,
+            new NpgsqlConnectionStringBuilder(DatabaseSetup.WithoutKerberosProbe("Host=db;Database=maroos;GSS Encryption Mode=Require")).GssEncryptionMode);
+    }
+
+    [Fact]
     public void Default_port_and_plain_connection_strings_are_handled()
     {
         Assert.Equal(5432, new NpgsqlConnectionStringBuilder(DatabaseSetup.ToNpgsqlConnectionString("postgresql://u:p@db.internal/maroos")).Port);

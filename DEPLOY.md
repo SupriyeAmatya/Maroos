@@ -6,7 +6,7 @@ Maroos ships as one Docker image (`Dockerfile`) that needs three things from its
 2. **An S3-compatible bucket** for auction photos (AWS S3, Cloudflare R2, Backblaze B2, Fly Tigris…). The bucket can stay private: the app serves photos itself at `/uploads/…`.
 3. **HTTPS in front of it.** Render and Fly.io both provide this.
 
-Run it locally first with `docker compose up --build` (PostgreSQL + MinIO + the app) and open http://localhost:8080.
+Run it locally first with `docker compose up --build` (PostgreSQL + an S3-compatible gateway + the app) and open http://localhost:8080.
 
 ## Settings
 
@@ -94,5 +94,6 @@ ConnectionStrings__DefaultConnection="<production connection>" Database__Provide
 - **One instance.** Live bid updates and the auction closer run inside the app, and Blazor keeps each visitor on one server connection. Running several instances needs sticky sessions and a SignalR backplane (e.g. Redis); until then keep a single instance, sized up as needed.
 - **Email.** There's no email sender yet, so account email confirmation and password-reset emails are off. Add an `IEmailSender<ApplicationUser>` (e.g. Postmark, SendGrid) and set `RequireConfirmedAccount = true` in `Program.cs` before relying on them.
 - **Payments.** Maroos doesn't take payment. When an auction ends, the winner and seller see each other's email and settle between themselves.
+- **Login keys.** The keys that sign login cookies are stored in the `DataProtectionKeys` table, so everyone stays signed in across redeploys. They're stored unencrypted (the app logs a one-time warning about it); anyone who can read your database could forge a login, so treat database access as the keys to the site.
 - **Backups.** Turn on your database host's automated backups, and versioning or backups on the photo bucket: a lost photo shows as a broken image on its listing.
 - **Scryfall and Wizards.** Card data and images come from Scryfall's free API: keep it free to view and keep the footer credit. The footer carries the Wizards of the Coast Fan Content Policy notice, which the policy requires.
