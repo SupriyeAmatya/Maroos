@@ -1,3 +1,8 @@
+/* Height of the sticky top navigation bar (NavMenu); sticky page elements sit below it. */
+:root {
+    --site-nav-height: 3.5rem;
+}
+
 html, body {
     font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
 }
@@ -248,7 +253,7 @@ h1:focus {
 
 .deck-preview {
     position: sticky;
-    top: 1rem;
+    top: calc(var(--site-nav-height) + 1rem);
 }
 
 .deck-preview img {
@@ -484,7 +489,7 @@ h1:focus {
 
 .new-auction-preview {
     position: sticky;
-    top: 1rem;
+    top: calc(var(--site-nav-height) + 1rem);
 }
 
 .new-auction-preview img {
@@ -510,7 +515,7 @@ h1:focus {
     }
 }
 
-/* Filters wrap by the space they have (the sidebar makes viewport breakpoints misleading). */
+/* Filters wrap by the space they have. */
 .auction-filters {
     display: flex;
     flex-wrap: wrap;
