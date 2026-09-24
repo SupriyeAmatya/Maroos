@@ -34,6 +34,19 @@ services:
         sync: false
       - key: Uploads__S3__SecretKey
         sync: false
+      # Email: any SMTP provider (Postmark, Brevo, SendGrid, Amazon SES). See DEPLOY.md.
+      - key: Email__From
+        sync: false
+      - key: Email__PublicBaseUrl
+        sync: false
+      - key: Email__Smtp__Host
+        sync: false
+      - key: Email__Smtp__Port
+        value: "587"
+      - key: Email__Smtp__Username
+        sync: false
+      - key: Email__Smtp__Password
+        sync: false
       # Optional GitHub login; leave empty to offer email/password only.
       - key: GitHub__ClientId
         sync: false

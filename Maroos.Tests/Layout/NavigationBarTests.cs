@@ -79,7 +79,7 @@ public class NavigationBarTests : IClassFixture<MaroosWebFactory>, IAsyncLifetim
     public async Task Signed_in_users_get_account_and_log_out_instead_of_register_and_log_in()
     {
         var browser = _factory.NewBrowser();
-        (await RegisterAsync(browser, $"{Guid.NewGuid():N}@example.com")).EnsureSuccessStatusCode();
+        (await _factory.RegisterAndConfirmAsync(browser, $"{Guid.NewGuid():N}@example.com")).EnsureSuccessStatusCode();
 
         var nav = MainNav(await PageAsync(browser, "/"));
 

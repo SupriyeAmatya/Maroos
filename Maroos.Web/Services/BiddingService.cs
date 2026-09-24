@@ -1,6 +1,8 @@
 using System.Data;
 using Maroos.Core.Auctions;
+using Maroos.Core.Email;
 using Maroos.Web.Data;
+using Maroos.Web.Services.Email;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
@@ -32,6 +34,7 @@ public sealed record MyBid(Guid AuctionId, string CardName, string SetName, long
 public sealed class BiddingService(
     IDbContextFactory<ApplicationDbContext> dbFactory,
     AuctionEvents events,
+    EmailOutbox emails,
     TimeProvider clock,
     ILogger<BiddingService> logger)
 {
@@ -60,18 +63,22 @@ public sealed class BiddingService(
     private async Task<BidResult> TryPlaceBidAsync(Guid auctionId, string bidderId, long amountCents, CancellationToken ct)
     {
         BidPlaced placed;
+        Auction auction;
+        string? previousHighBidderId;
         await using (var db = await dbFactory.CreateDbContextAsync(ct))
         await using (var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct))
         {
-            var auction = await db.Auctions.FirstOrDefaultAsync(a => a.Id == auctionId, ct);
-            if (auction is null)
+            var found = await db.Auctions.FirstOrDefaultAsync(a => a.Id == auctionId, ct);
+            if (found is null)
                 return BidResult.Rejected("This auction doesn't exist.");
+            auction = found;
 
             var high = await db.Bids
                 .Where(b => b.AuctionId == auctionId)
                 .OrderByDescending(b => b.AmountCents).ThenBy(b => b.CreatedAtUtc)
                 .Select(b => new { b.AmountCents, b.BidderId })
                 .FirstOrDefaultAsync(ct);
+            previousHighBidderId = high?.BidderId;
 
             var now = clock.GetUtcNow().UtcDateTime;
             var error = BidRules.Validate(auction, bidderId, amountCents, high?.AmountCents, high?.BidderId, now);
@@ -90,7 +97,31 @@ public sealed class BiddingService(
 
         // Only tell anyone after the bid is committed.
         await events.PublishAsync(placed);
+        if (previousHighBidderId is not null)
+            await QueueOutbidEmailAsync(auction, previousHighBidderId, bidderId, amountCents, placed.PlacedAtUtc, ct);
         return new BidResult(true, null, amountCents);
+    }
+
+    /// <summary>Emails the bidder who just lost the lead. Runs after commit: a failure is logged and never undoes the bid.</summary>
+    private async Task QueueOutbidEmailAsync(Auction auction, string previousHighBidderId, string bidderId, long amountCents, DateTime nowUtc, CancellationToken ct)
+    {
+        try
+        {
+            await using var db = await dbFactory.CreateDbContextAsync(ct);
+            var previous = await db.Users.Where(u => u.Id == previousHighBidderId)
+                .Select(u => new { u.Email, u.AuctionEmails })
+                .FirstOrDefaultAsync(ct);
+            if (previous?.Email is null || !OutbidRule.ShouldNotify(previousHighBidderId, bidderId, previous.AuctionEmails))
+                return;
+
+            var content = AuctionEmailContent.Outbid(emails.InfoFor(auction), amountCents,
+                BidRules.MinimumNextBid(auction, amountCents), AuctionRules.TimeLeft(nowUtc, auction.EndsAtUtc));
+            await emails.QueueAsync(new EmailMessage(EmailKind.Outbid, previous.Email, content, previousHighBidderId, auction.Id), ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Couldn't queue the outbid email for auction {AuctionId}", auction.Id);
+        }
     }
 
     /// <summary>Bid history, highest first, with public bidder names.</summary>

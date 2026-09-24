@@ -7,6 +7,7 @@ using Maroos.Web.Services;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using SkiaSharp;
@@ -54,7 +55,7 @@ public sealed class PostgresTestDb : IDbContextFactory<ApplicationDbContext>, ID
     private readonly string _database = $"maroos_test_{Guid.NewGuid():N}";
     private readonly DbContextOptions<PostgresDbContext> _options;
 
-    public PostgresTestDb()
+    public PostgresTestDb(string? migrateTo = null)
     {
         var builder = new NpgsqlConnectionStringBuilder(ServerConnectionString) { Database = _database };
         // Identity reads its schema options from the application's services; give it the same ones as Program.cs.
@@ -67,7 +68,7 @@ public sealed class PostgresTestDb : IDbContextFactory<ApplicationDbContext>, ID
             .Options;
 
         using var db = CreateDbContext();
-        db.Database.Migrate();
+        db.GetService<Microsoft.EntityFrameworkCore.Migrations.IMigrator>().Migrate(migrateTo);
     }
 
     public ApplicationDbContext CreateDbContext() => new PostgresDbContext(_options);

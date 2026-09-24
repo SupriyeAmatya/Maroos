@@ -1,5 +1,6 @@
 using Maroos.Core.Auctions;
 using Maroos.Core.Decks;
+using Maroos.Core.Email;
 using Maroos.Core.Scryfall;
 using Maroos.Core.Watchlist;
 using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
@@ -29,6 +30,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>, IDataPro
     public DbSet<Auction> Auctions => Set<Auction>();
     public DbSet<Bid> Bids => Set<Bid>();
     public DbSet<Watch> Watches => Set<Watch>();
+    public DbSet<OutgoingEmail> OutgoingEmails => Set<OutgoingEmail>();
 
     /// <summary>ASP.NET Core Data Protection keys (they sign login cookies), so they survive redeploys.</summary>
     public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
@@ -96,6 +98,16 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>, IDataPro
             watch.HasKey(w => new { w.UserId, w.TargetType, w.TargetId });
             watch.HasOne<ApplicationUser>().WithMany().HasForeignKey(w => w.UserId).OnDelete(DeleteBehavior.Cascade);
             watch.HasIndex(w => new { w.TargetType, w.TargetId });
+        });
+
+        builder.Entity<OutgoingEmail>(email =>
+        {
+            email.HasKey(e => e.Id);
+            email.Property(e => e.ToAddress).HasMaxLength(OutgoingEmail.MaxAddressLength);
+            email.Property(e => e.Subject).HasMaxLength(OutgoingEmail.MaxSubjectLength);
+            email.Property(e => e.LastError).HasMaxLength(OutgoingEmail.MaxErrorLength);
+            email.HasOne<ApplicationUser>().WithMany().HasForeignKey(e => e.UserId).OnDelete(DeleteBehavior.Cascade);
+            email.HasIndex(e => new { e.SentAtUtc, e.NextAttemptAtUtc });
         });
     }
 }

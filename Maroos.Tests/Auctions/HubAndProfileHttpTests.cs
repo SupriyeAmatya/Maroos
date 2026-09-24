@@ -28,7 +28,7 @@ public class HubAndProfileHttpTests : IClassFixture<MaroosWebFactory>, IAsyncLif
     {
         var email = $"{Guid.NewGuid():N}@example.com";
         var browser = _factory.NewBrowser();
-        (await PageForms.RegisterAsync(browser, email, displayName)).EnsureSuccessStatusCode();
+        (await _factory.RegisterAndConfirmAsync(browser, email, displayName)).EnsureSuccessStatusCode();
         using var scope = _factory.Services.CreateScope();
         var user = await scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>().FindByEmailAsync(email);
         return (browser, user!.Id, email);

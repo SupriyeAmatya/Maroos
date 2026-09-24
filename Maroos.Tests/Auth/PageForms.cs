@@ -1,5 +1,9 @@
 using System.Text.RegularExpressions;
+using Maroos.Core.Email;
+using Maroos.Web.Data;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Maroos.Tests.Auth;
 
@@ -42,4 +46,33 @@ public static partial class PageForms
             ["Input.Email"] = email,
             ["Input.Password"] = password,
         });
+
+    [GeneratedRegex(@"https?://\S+")]
+    private static partial Regex Link();
+
+    /// <summary>The newest queued email of this kind to this address. Test hosts don't run the dispatcher, so emails stay queued.</summary>
+    public static async Task<OutgoingEmail> LatestEmailAsync(this MaroosWebFactory factory, string to, EmailKind kind)
+    {
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        return await db.OutgoingEmails.AsNoTracking()
+            .Where(e => e.ToAddress == to && e.Kind == kind)
+            .OrderByDescending(e => e.CreatedAtUtc)
+            .FirstAsync();
+    }
+
+    /// <summary>The first link in an email's text body.</summary>
+    public static string LinkIn(OutgoingEmail email) => Link().Match(email.TextBody!).Value;
+
+    /// <summary>
+    /// Registers, follows the confirmation link from the queued email, and logs in: the signed-in browser that
+    /// <see cref="RegisterAsync"/> alone gave before email confirmation was required.
+    /// </summary>
+    public static async Task<HttpResponseMessage> RegisterAndConfirmAsync(this MaroosWebFactory factory, HttpClient browser, string email, string displayName = "Test Player")
+    {
+        (await RegisterAsync(browser, email, displayName)).EnsureSuccessStatusCode();
+        var confirmation = await factory.LatestEmailAsync(email, EmailKind.ConfirmAccount);
+        (await browser.GetAsync(LinkIn(confirmation))).EnsureSuccessStatusCode();
+        return await LoginAsync(browser, email, Password);
+    }
 }

@@ -1,6 +1,8 @@
 using Maroos.Core.Auctions;
+using Maroos.Core.Email;
 using Maroos.Core.Scryfall;
 using Maroos.Web.Data;
+using Maroos.Web.Services.Email;
 using Microsoft.EntityFrameworkCore;
 
 namespace Maroos.Web.Services;
@@ -64,7 +66,7 @@ public sealed class AuctionAccessException() : Exception("Only the seller can ch
 /// Creates, lists, shows, cancels and closes auction listings. Every change checks that the caller is the seller.
 /// Bids themselves go through <see cref="BiddingService"/>.
 /// </summary>
-public sealed class AuctionService(IDbContextFactory<ApplicationDbContext> dbFactory, CardService cards, AuctionEvents events, TimeProvider clock)
+public sealed class AuctionService(IDbContextFactory<ApplicationDbContext> dbFactory, CardService cards, AuctionEvents events, EmailOutbox emails, TimeProvider clock)
 {
     public async Task<Auction> CreateAsync(string sellerId, NewAuction request, CancellationToken ct = default)
     {
@@ -274,32 +276,65 @@ public sealed class AuctionService(IDbContextFactory<ApplicationDbContext> dbFac
         await using (var db = await dbFactory.CreateDbContextAsync(ct))
         {
             var now = clock.GetUtcNow().UtcDateTime;
-            var expired = await db.Auctions.Where(a => a.Status == AuctionStatus.Active && a.EndsAtUtc <= now).ToListAsync(ct);
+            // With each seller's contact details and email switch, still one query.
+            var expired = await db.Auctions
+                .Where(a => a.Status == AuctionStatus.Active && a.EndsAtUtc <= now)
+                .Join(db.Users, a => a.SellerId, u => u.Id, (a, u) => new
+                {
+                    Auction = a,
+                    SellerName = u.DisplayName,
+                    SellerEmail = u.Email,
+                    SellerWantsEmails = u.AuctionEmails,
+                })
+                .ToListAsync(ct);
             if (expired.Count == 0)
                 return 0;
 
             // One query for every expired auction's bids, not one per auction.
-            var expiredIds = expired.Select(a => a.Id).ToList();
+            var expiredIds = expired.Select(e => e.Auction.Id).ToList();
             var bids = await db.Bids
                 .Where(b => expiredIds.Contains(b.AuctionId))
-                .Join(db.Users, b => b.BidderId, u => u.Id, (b, u) => new { b.AuctionId, b.BidderId, b.AmountCents, b.CreatedAtUtc, u.DisplayName })
+                .Join(db.Users, b => b.BidderId, u => u.Id, (b, u) => new
+                {
+                    b.AuctionId, b.BidderId, b.AmountCents, b.CreatedAtUtc, u.DisplayName, u.Email, WantsEmails = u.AuctionEmails,
+                })
                 .ToListAsync(ct);
             var topBids = bids
                 .GroupBy(b => b.AuctionId)
                 .ToDictionary(g => g.Key, g => g.OrderByDescending(b => b.AmountCents).ThenBy(b => b.CreatedAtUtc).First());
 
-            foreach (var auction in expired)
+            foreach (var row in expired)
             {
+                var auction = row.Auction;
                 var top = topBids.GetValueOrDefault(auction.Id);
 
                 auction.Status = AuctionStatus.Ended;
                 auction.WinnerId = top?.BidderId;
                 ended.Add(new AuctionEnded(auction.Id, top is null ? null : ApplicationUser.PublicName(top.DisplayName), top?.AmountCents));
+
+                // Queued in this context, so they save with the status change: exactly once per auction.
+                var info = emails.InfoFor(auction);
+                if (top is null)
+                {
+                    if (row.SellerWantsEmails && row.SellerEmail is not null)
+                        emails.Add(db, new EmailMessage(EmailKind.AuctionUnsold, row.SellerEmail, AuctionEmailContent.Unsold(info), auction.SellerId, auction.Id));
+                    continue;
+                }
+
+                if (top.WantsEmails && top.Email is not null)
+                    emails.Add(db, new EmailMessage(EmailKind.AuctionWon, top.Email,
+                        AuctionEmailContent.Won(info, top.AmountCents, ApplicationUser.PublicName(row.SellerName), row.SellerEmail ?? "(not on file)"),
+                        top.BidderId, auction.Id));
+                if (row.SellerWantsEmails && row.SellerEmail is not null)
+                    emails.Add(db, new EmailMessage(EmailKind.AuctionSold, row.SellerEmail,
+                        AuctionEmailContent.Sold(info, top.AmountCents, ApplicationUser.PublicName(top.DisplayName), top.Email ?? "(not on file)"),
+                        auction.SellerId, auction.Id));
             }
 
             await db.SaveChangesAsync(ct);
         }
 
+        emails.Nudge();
         foreach (var auctionEnded in ended)
             await events.PublishAsync(auctionEnded);
         return ended.Count;

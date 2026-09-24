@@ -8,7 +8,11 @@
 #   MAROOS_TEST_POSTGRES="Host=localhost;Port=5433;Username=postgres;Password=maroos-local"
 #   MAROOS_TEST_S3_URL=http://localhost:9000 MAROOS_TEST_S3_BUCKET=maroos-photos
 #   MAROOS_TEST_S3_ACCESS_KEY=maroos MAROOS_TEST_S3_SECRET_KEY=maroos-local-secret
+#   MAROOS_TEST_SMTP_HOST=localhost MAROOS_TEST_SMTP_PORT=1025 MAROOS_TEST_MAILPIT_URL=http://localhost:8025   (docker compose up -d mailpit)
 #   dotnet test Maroos.slnx
+#
+# Every email the app sends lands in Mailpit: read them at http://localhost:8025. For `dotnet watch`, start it with
+#   docker compose up -d mailpit
 #
 # These passwords are for local testing only.
 
@@ -53,6 +57,13 @@ services:
         aws --endpoint-url http://s3:9000 s3api create-bucket --bucket maroos-photos && exit 0;
         sleep 1; done; exit 1
 
+  # Catches every email the app sends (nothing reaches real inboxes). Inbox: http://localhost:8025
+  mailpit:
+    image: axllent/mailpit:v1.31.2
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
   web:
     build: .
     ports:
@@ -65,11 +76,18 @@ services:
       Uploads__S3__AccessKey: "maroos"
       Uploads__S3__SecretKey: "maroos-local-secret"
       Uploads__S3__ForcePathStyle: "true"
+      Email__From: "Maroos <no-reply@maroos.local>"
+      Email__PublicBaseUrl: "http://localhost:8080"
+      Email__Smtp__Host: "mailpit"
+      Email__Smtp__Port: "1025"
+      Email__Smtp__Security: "None"
     depends_on:
       db:
         condition: service_healthy
       s3-bucket:
         condition: service_completed_successfully
+      mailpit:
+        condition: service_started
 
 volumes:
   db-data:

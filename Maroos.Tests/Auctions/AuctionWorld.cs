@@ -1,7 +1,10 @@
 using Maroos.Core.Auctions;
+using Maroos.Core.Email;
+using Maroos.Tests.Email;
 using Maroos.Tests.Scryfall;
 using Maroos.Web.Data;
 using Maroos.Web.Services;
+using Maroos.Web.Services.Email;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -14,6 +17,9 @@ public sealed class AuctionWorld : IDisposable
     public IDbContextFactory<ApplicationDbContext> Db { get; }
     public ManualClock Clock { get; } = new(new DateTimeOffset(2026, 9, 23, 12, 0, 0, TimeSpan.Zero));
     public AuctionEvents Events { get; } = new(NullLogger<AuctionEvents>.Instance);
+    public RecordingEmailTransport EmailTransport { get; } = new();
+    public EmailOutbox Emails { get; }
+    public EmailDispatcher EmailDispatcher { get; }
     public CardService Cards { get; }
     public AuctionService Auctions { get; }
     public BiddingService Bidding { get; }
@@ -29,22 +35,32 @@ public sealed class AuctionWorld : IDisposable
         Db = db;
         _database = (IDisposable)db;
         Cards = new CardService(FakeScryfallHandler.WithFixtures().CreateClient(), Db, new MemoryCache(new MemoryCacheOptions()), Clock);
-        Auctions = new AuctionService(Db, Cards, Events, Clock);
-        Bidding = new BiddingService(Db, Events, Clock, NullLogger<BiddingService>.Instance);
+        var emailSignal = new EmailSignal();
+        Emails = new EmailOutbox(Db, TestEmail.Options, emailSignal, Clock);
+        EmailDispatcher = new EmailDispatcher(Db, EmailTransport, emailSignal, Clock, NullLogger<EmailDispatcher>.Instance);
+        Auctions = new AuctionService(Db, Cards, Events, Emails, Clock);
+        Bidding = new BiddingService(Db, Events, Emails, Clock, NullLogger<BiddingService>.Instance);
         Watches = new WatchService(Db, Clock);
         Decks = new DeckService(Db, Cards, Clock);
     }
 
     public void Dispose() => _database.Dispose();
 
-    public string AddUser(string displayName, string? email = null)
+    public string AddUser(string displayName, string? email = null, bool auctionEmails = true)
     {
         using var db = Db.CreateDbContext();
         email ??= $"{displayName.Replace(' ', '.').ToLowerInvariant()}@example.com";
-        var user = new ApplicationUser { UserName = email, Email = email, DisplayName = displayName };
+        var user = new ApplicationUser { UserName = email, Email = email, DisplayName = displayName, AuctionEmails = auctionEmails };
         db.Users.Add(user);
         db.SaveChanges();
         return user.Id;
+    }
+
+    /// <summary>Every email queued so far.</summary>
+    public List<OutgoingEmail> QueuedEmails()
+    {
+        using var db = Db.CreateDbContext();
+        return db.OutgoingEmails.AsNoTracking().ToList();
     }
 
     /// <summary>Lists Sol Ring (C21) starting at $5.00 with a $1.00 increment.</summary>

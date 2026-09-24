@@ -1,5 +1,6 @@
 using Maroos.Core.Scryfall;
 using Maroos.Web.Services;
+using Maroos.Web.Services.Email;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -86,11 +87,21 @@ else
 }
 builder.Services.AddSingleton<AuctionPhotoStore>();
 
+// Email: queued in the OutgoingEmails table and sent in the background over SMTP (Mailpit locally, any provider in production).
+var emailOptions = EmailOptions.Bind(builder.Configuration);
+if (!builder.Environment.IsDevelopment() && emailOptions.MissingSettings() is { Count: > 0 } missingEmailSettings)
+    throw new InvalidOperationException($"Email isn't configured: set {string.Join(", ", missingEmailSettings)} (see DEPLOY.md).");
+builder.Services.AddSingleton(emailOptions);
+builder.Services.AddSingleton<EmailSignal>();
+builder.Services.AddSingleton<EmailOutbox>();
+builder.Services.AddSingleton<IEmailTransport, SmtpEmailTransport>();
+builder.Services.AddSingleton<EmailDispatcher>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<EmailDispatcher>());
+
 builder.Services.AddIdentityCore<ApplicationUser>(options =>
     {
-        // No real email sender yet (IdentityNoOpEmailSender), so don't block sign-in on email confirmation.
-        // Flip this back to true once a real IEmailSender is registered.
-        options.SignIn.RequireConfirmedAccount = false;
+        // New accounts confirm their email before logging in (IdentityEmailSender sends the link).
+        options.SignIn.RequireConfirmedAccount = true;
         options.User.RequireUniqueEmail = true;
         options.Password.RequiredLength = 8;
         options.Lockout.MaxFailedAccessAttempts = 5;
@@ -101,7 +112,7 @@ builder.Services.AddIdentityCore<ApplicationUser>(options =>
     .AddSignInManager()
     .AddDefaultTokenProviders();
 
-builder.Services.AddSingleton<IEmailSender<ApplicationUser>, IdentityNoOpEmailSender>();
+builder.Services.AddSingleton<IEmailSender<ApplicationUser>, IdentityEmailSender>();
 
 var app = builder.Build();
 

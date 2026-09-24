@@ -10,6 +10,9 @@ public class ApplicationUser : IdentityUser
     /// <summary>What other people see (seller name, bidder name). Never show the email instead.</summary>
     public string? DisplayName { get; set; }
 
+    /// <summary>"Email me about my bids and auctions": outbid, won, sold, ended unsold. Account emails always send.</summary>
+    public bool AuctionEmails { get; set; } = true;
+
     /// <summary>Shown when an account has no display name yet (e.g. created before display names existed).</summary>
     public const string FallbackDisplayName = "Maroos player";
 

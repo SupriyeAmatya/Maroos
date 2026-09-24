@@ -65,10 +65,12 @@ public class IdentityLoginTests : IClassFixture<MaroosWebFactory>, IAsyncLifetim
         return (users, signIn, scope);
     }
 
-    private static ApplicationUser NewUser(string email) => new() { UserName = email, Email = email };
+    /// <summary>A confirmed account, as after clicking the sign-up email's link (RequireConfirmedAccount is on).</summary>
+    private static ApplicationUser NewUser(string email, bool confirmed = true) =>
+        new() { UserName = email, Email = email, EmailConfirmed = confirmed };
 
     [Fact]
-    public async Task Registered_user_can_log_in_with_email_and_password_without_confirming()
+    public async Task Confirmed_user_can_log_in_with_email_and_password()
     {
         var (users, signIn, scope) = Managers();
         using var _ = scope;
@@ -78,6 +80,18 @@ public class IdentityLoginTests : IClassFixture<MaroosWebFactory>, IAsyncLifetim
 
         var result = await signIn.CheckPasswordSignInAsync(user, "Correct-horse-1", lockoutOnFailure: true);
         Assert.True(result.Succeeded);
+    }
+
+    [Fact]
+    public async Task Unconfirmed_user_cannot_log_in_until_they_confirm_their_email()
+    {
+        var (users, signIn, scope) = Managers();
+        using var _ = scope;
+        var user = NewUser($"{Guid.NewGuid():N}@example.com", confirmed: false);
+        await users.CreateAsync(user, "Correct-horse-1");
+
+        var result = await signIn.CheckPasswordSignInAsync(user, "Correct-horse-1", lockoutOnFailure: true);
+        Assert.True(result.IsNotAllowed);
     }
 
     [Fact]

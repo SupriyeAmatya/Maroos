@@ -1,10 +1,12 @@
 using System.Security.Claims;
 using Bunit;
 using Maroos.Core.Auctions;
+using Maroos.Tests.Email;
 using Maroos.Tests.Scryfall;
 using Maroos.Web.Components.Pages;
 using Maroos.Web.Data;
 using Maroos.Web.Services;
+using Maroos.Web.Services.Email;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.AspNetCore.Components.Web;
@@ -28,11 +30,12 @@ public sealed class AuctionPagesTests : BunitContext
     {
         var cards = new CardService(FakeScryfallHandler.WithFixtures().CreateClient(), _db, new MemoryCache(new MemoryCacheOptions()), TimeProvider.System);
         var events = new AuctionEvents(NullLogger<AuctionEvents>.Instance);
-        _auctions = new AuctionService(_db, cards, events, TimeProvider.System);
+        var emails = new EmailOutbox(_db, TestEmail.Options, new EmailSignal(), TimeProvider.System);
+        _auctions = new AuctionService(_db, cards, events, emails, TimeProvider.System);
         Services.AddSingleton(cards);
         Services.AddSingleton(_auctions);
         Services.AddSingleton(events);
-        Services.AddSingleton(new BiddingService(_db, events, TimeProvider.System, NullLogger<BiddingService>.Instance));
+        Services.AddSingleton(new BiddingService(_db, events, emails, TimeProvider.System, NullLogger<BiddingService>.Instance));
         Services.AddSingleton(new WatchService(_db, TimeProvider.System));
         Services.AddSingleton<TimeProvider>(TimeProvider.System);
         Services.AddSingleton(new AuctionPhotoStore(new LocalPhotoBlobStore(_photoRoot)));

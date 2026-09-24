@@ -11,6 +11,9 @@ primary_region = "iad"
   Database__MigrateOnStartup = "true"
   # Fly's proxy terminates HTTPS; trust its X-Forwarded-* headers.
   ASPNETCORE_FORWARDEDHEADERS_ENABLED = "true"
+  # Email: set Email__From, Email__Smtp__Host, Email__Smtp__Username and Email__Smtp__Password with `fly secrets set` (see DEPLOY.md).
+  Email__PublicBaseUrl = "https://maroos.fly.dev"
+  Email__Smtp__Port = "587"
 
 [http_service]
   internal_port = 8080

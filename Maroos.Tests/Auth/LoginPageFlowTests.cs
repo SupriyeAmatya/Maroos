@@ -30,7 +30,7 @@ public class LoginPageFlowTests : IClassFixture<MaroosWebFactory>, IAsyncLifetim
 
         Assert.False(await IsSignedInAsync(browser, email));
 
-        (await RegisterAsync(browser, email)).EnsureSuccessStatusCode();
+        (await _factory.RegisterAndConfirmAsync(browser, email)).EnsureSuccessStatusCode();
         Assert.True(await IsSignedInAsync(browser, email));
 
         var logoutToken = await AntiforgeryTokenAsync(browser, "/");
@@ -49,7 +49,7 @@ public class LoginPageFlowTests : IClassFixture<MaroosWebFactory>, IAsyncLifetim
     public async Task Wrong_password_on_login_page_shows_error_and_stays_signed_out()
     {
         var email = $"{Guid.NewGuid():N}@example.com";
-        (await RegisterAsync(NewBrowser(), email)).EnsureSuccessStatusCode();
+        (await _factory.RegisterAndConfirmAsync(NewBrowser(), email)).EnsureSuccessStatusCode();
 
         var browser = NewBrowser();
         var response = await LoginAsync(browser, email, "wrong-password");

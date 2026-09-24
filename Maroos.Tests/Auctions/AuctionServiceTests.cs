@@ -1,7 +1,9 @@
 using Maroos.Core.Auctions;
+using Maroos.Tests.Email;
 using Maroos.Tests.Scryfall;
 using Maroos.Web.Data;
 using Maroos.Web.Services;
+using Maroos.Web.Services.Email;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -18,7 +20,8 @@ public sealed class AuctionServiceTests : IDisposable
     public AuctionServiceTests()
     {
         var cards = new CardService(FakeScryfallHandler.WithFixtures().CreateClient(), _db, new MemoryCache(new MemoryCacheOptions()), _clock);
-        _auctions = new AuctionService(_db, cards, new AuctionEvents(NullLogger<AuctionEvents>.Instance), _clock);
+        _auctions = new AuctionService(_db, cards, new AuctionEvents(NullLogger<AuctionEvents>.Instance),
+            new EmailOutbox(_db, TestEmail.Options, new EmailSignal(), _clock), _clock);
         _seller = AddUser("seller@example.com", "Card Shark");
         _bob = AddUser("bob@example.com", displayName: null);
     }

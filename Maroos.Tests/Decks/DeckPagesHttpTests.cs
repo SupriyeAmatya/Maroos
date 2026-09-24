@@ -20,7 +20,7 @@ public partial class DeckPagesHttpTests : IClassFixture<MaroosWebFactory>, IAsyn
     private async Task<HttpClient> SignedInBrowserAsync()
     {
         var browser = _factory.NewBrowser();
-        (await RegisterAsync(browser, $"{Guid.NewGuid():N}@example.com")).EnsureSuccessStatusCode();
+        (await _factory.RegisterAndConfirmAsync(browser, $"{Guid.NewGuid():N}@example.com")).EnsureSuccessStatusCode();
         return browser;
     }
 

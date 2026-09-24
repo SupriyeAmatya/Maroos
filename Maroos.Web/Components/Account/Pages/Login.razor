@@ -139,6 +139,11 @@
             Logger.LogWarning("User account locked out.");
             RedirectManager.RedirectTo("Account/Lockout");
         }
+        else if (result.IsNotAllowed)
+        {
+            // Identity checks confirmation before the password, so this also shows for a wrong password on an unconfirmed account.
+            errorMessage = "Error: Confirm your email address before logging in. Use the link we emailed you, or \"Resend email confirmation\" below.";
+        }
         else
         {
             errorMessage = "Error: Invalid login attempt.";
