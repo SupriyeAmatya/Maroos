@@ -21,6 +21,8 @@ Card data and images come from [Scryfall](https://scryfall.com)'s free public AP
 - **Accounts.** Sign up with an email and password, or log in with GitHub. Two-factor authentication and passkeys are supported.
   - Other players only ever see your display name. The one exception: after an auction ends, the winner and the seller see each other's email so they can arrange payment.
 - **Profile and watchlist.** Your decks, listings and bids in one place. Save any deck or auction with ♡ Watch.
+- **Light and dark mode.** The site follows your device's setting. The moon/sun button in the top bar switches it and remembers your choice. The dark theme uses purplish blacks with readable contrast throughout.
+- **Top navigation bar.** Icons only, with each label shown on hover or keyboard focus. The pin button keeps the labels visible.
 
 ## Tech stack
 

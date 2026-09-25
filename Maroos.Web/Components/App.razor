@@ -13,6 +13,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     @* All relative links (href="decks") resolve from the site root. *@
     <base href="/" />
+    @* Light or dark mode (wwwroot/theme.js). Deliberately the first script, before any stylesheet: it sets
+       data-bs-theme on <html> before anything is drawn, so a dark-mode visitor never sees a white flash.
+       NavigationBarTests checks this order. *@
+    <script src="@Assets["theme.js"]"></script>
     <ResourcePreloader />
     @* Styles: Bootstrap, the site's own app.css, then the per-component (scoped) CSS bundle. *@
     <link rel="stylesheet" href="@Assets["lib/bootstrap/dist/css/bootstrap.min.css"]" />

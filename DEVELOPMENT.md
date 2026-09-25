@@ -60,11 +60,12 @@ Each phase ends with a working site and a commit.
   - Views: `/decks/{id}?view=list|stacks|grid`, parsed by `DeckViewModes.Parse` (unknown → List). Every view groups cards with `DeckGroups.For` (Core). Stacks and Grid are `Components/Decks/DeckPictures` built from `DeckCardTile`s. Editing (−/+) is list-only.
   - Sample hand: `SampleHand` (Core) deals from the main board only; pass a seeded `Random` in tests. `SampleHandPanel` shows it and saves nothing.
   - Copy: `DeckService.CopyAsync` makes a private "Copy of …" for any signed-in user who can see the deck (owners get "Duplicate"). It throws `DeckNotFoundException` for decks the caller can't see. `Deck.CopiedFromDeckId` has a foreign key with `ON DELETE SET NULL`. `DeckView.CopiedFrom` is the credit (original + owner's public name), shown only while the original is visible to the viewer. `?copied=1` is read as a string (a bool query parameter throws on other values), shown once, then removed from the URL.
-- Charts: `Maroos.Web/Components/Decks/DeckStatsPanel` is a hand-drawn SVG; colors are `--viz-*` tokens on `.viz-root` in `app.css`. Format SVG numbers with invariant culture. The site is light-only; dark chart tokens apply under `[data-bs-theme="dark"]`, not the OS setting.
+- Charts: `Maroos.Web/Components/Decks/DeckStatsPanel` is a hand-drawn SVG; colors are `--viz-*` tokens on `.viz-root` in `app.css`. Format SVG numbers with invariant culture. Dark chart tokens apply under `[data-bs-theme="dark"]` (see Layout: theme).
 - If `dotnet watch` has the Debug build locked, build/test/migrate with `-c Release` / `--configuration Release`.
 
 ## Layout
 
+- Theme: light and dark ("Midnight plum"). `wwwroot/theme.js` (in `<head>`, before the stylesheets) sets Bootstrap's `data-bs-theme` on `<html>` from localStorage `maroos.theme`, else the device setting; the top-bar moon/sun button (`data-theme-toggle`) switches and saves it. Colors are variables: `--maroos-*` (light values in `:root`) and Bootstrap's `--bs-*`, both overridden under `[data-bs-theme="dark"]` in `app.css`; new colors go in both blocks and keep text at WCAG AA (4.5:1). The dark top bar is styled in `NavMenu.razor.css`.
 - Navigation is a sticky top bar (`Components/Layout/NavMenu`): icons only, with each label shown under its icon on hover or keyboard focus (labels stay in the DOM for screen readers). The pin button toggles "always show labels"; `wwwroot/nav.js` (loaded in `<head>`) stores it in localStorage (`maroos.navPinned`) as `.nav-pinned` on `<html>` and re-applies it after Blazor enhanced navigation. Sticky page elements offset by `--site-nav-height` (app.css).
 
 ## Accounts

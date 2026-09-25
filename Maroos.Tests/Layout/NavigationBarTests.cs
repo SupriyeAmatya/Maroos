@@ -1,7 +1,8 @@
 // =====================================================================================================
 // FILE: Maroos.Tests/Layout/NavigationBarTests.cs
 // PURPOSE: The top navigation bar over real HTTP: every link has an icon and a readable label,
-// the pin button and its script are there, the old sidebar is gone, the current page is highlighted, and
+// the pin button and its script are there, the dark mode toggle is there and its script runs before any
+// stylesheet, the old sidebar is gone, the current page is highlighted, and
 // signed-in users get Account and Log out.
 // =====================================================================================================
 
@@ -67,6 +68,29 @@ public class NavigationBarTests : IClassFixture<MaroosWebFactory>, IAsyncLifetim
         Assert.Equal("Always show labels", pin.QuerySelector(".nav-label")?.TextContent.Trim());
         // In <head>, so a pinned bar is applied before the page is drawn.
         Assert.NotNull(page.Head!.QuerySelector("script[src^='nav']"));
+    }
+
+    // TEST: The bar has a dark mode toggle whose script runs before any styles.
+    // Step 1: the toggle is in the bar, starts "not pressed" (the server always renders light; theme.js corrects it
+    // in the browser), and has a readable label.
+    // Step 2: in <head>, theme.js comes before the first stylesheet. If someone moved it below, dark-mode visitors
+    // would see a white flash on every page load, and this test would fail.
+    [Fact]
+    public async Task The_bar_has_a_dark_mode_toggle_whose_script_runs_before_any_styles()
+    {
+        var page = await PageAsync(_factory.NewBrowser(), "/");
+        var toggle = MainNav(page).QuerySelector("button[data-theme-toggle]");
+
+        Assert.NotNull(toggle);
+        Assert.Equal("false", toggle.GetAttribute("aria-pressed"));
+        Assert.Equal("Dark mode", toggle.QuerySelector(".nav-label")?.TextContent.Trim());
+
+        // The theme is set before the first stylesheet loads, so a dark page never flashes white.
+        var head = page.Head!.Children.ToList();
+        var script = head.FindIndex(e => e.LocalName == "script" && (e.GetAttribute("src") ?? "").StartsWith("theme"));
+        var firstStyles = head.FindIndex(e => e.LocalName == "link" && e.GetAttribute("rel") == "stylesheet");
+        Assert.True(script >= 0, "theme script missing from <head>");
+        Assert.True(script < firstStyles, "theme script must come before the stylesheets");
     }
 
     // TEST: The old sidebar is gone.

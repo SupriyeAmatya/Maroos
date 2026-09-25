@@ -5,7 +5,9 @@
      * icons drawn as CSS masks so they take the text color;
      * labels as small tags under the icons, shown on hover/keyboard focus;
      * pinned mode (html.nav-pinned, set by wwwroot/nav.js): labels always visible next to the icons;
-     * tighter spacing on phones so the icon-only bar fits one row.
+     * dark mode (html[data-bs-theme="dark"], set by wwwroot/theme.js): a flat near-black bar, and the
+       toggle's moon icon swapped for a sun;
+     * tighter spacing on phones so the icon-only bar fits one row (and no brand text on narrow phones).
    "::deep" reaches elements rendered by child components (NavLink's own <a>).
    ===================================================================================================== */
 /* The bar: stays at the top while scrolling (sticky), above page content (z-index). */
@@ -151,6 +153,16 @@
     --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8 3h8'/%3E%3Cpath d='M10 3v6l-3 4h10l-3-4V3'/%3E%3Cpath d='M12 13v8'/%3E%3C/svg%3E");
 }
 
+/* The dark mode toggle in light mode: a crescent moon, "switch to dark". */
+.site-nav ::deep .icon-theme {
+    --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z'/%3E%3C/svg%3E");
+}
+
+/* In dark mode the toggle shows a sun: "switch back to light". */
+html[data-bs-theme="dark"] .site-nav ::deep .icon-theme {
+    --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='4'/%3E%3Cpath d='M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4'/%3E%3C/svg%3E");
+}
+
 /* Icons only: the label is a small tag under its icon, shown on hover or keyboard focus. It stays in the page
    (hidden with opacity, not display: none), so screen readers still read every label. */
 .site-nav ::deep .nav-label {
@@ -205,6 +217,40 @@ html.nav-pinned .site-nav ::deep .nav-link:focus-visible .nav-label {
     transition: none;
 }
 
+/* Dark mode (html[data-bs-theme="dark"], set by wwwroot/theme.js): a flat near-black bar with a hairline border
+   instead of the gradient, softer link colors, and plum highlights. */
+/* The bar itself: no gradient, the darkest plum-black (#0c0a11, a step below the page's #120f18), and a 1px
+   line in the border color instead of a shadow (shadows barely show on a dark page). */
+html[data-bs-theme="dark"] .site-nav {
+    background-image: none;
+    background-color: #0c0a11;
+    box-shadow: 0 1px 0 #2e2640;
+}
+
+/* Links and icons: a soft lavender grey (icons follow it, since they're filled with currentColor). */
+html[data-bs-theme="dark"] .site-nav ::deep .nav-link {
+    color: #b9b0cc;
+}
+
+    /* Hover: a slightly lighter plum behind, near-white text. */
+    html[data-bs-theme="dark"] .site-nav ::deep .nav-link:hover {
+        background-color: #1f1a2b;
+        color: #f1edf8;
+    }
+
+    /* The current page and the pin while it's on: a stronger plum highlight. */
+    html[data-bs-theme="dark"] .site-nav ::deep .nav-link.active,
+    html[data-bs-theme="dark"] .site-nav ::deep .nav-pin[aria-pressed="true"] {
+        background-color: #2c2340;
+        color: #f1edf8;
+    }
+
+/* The hover label tags turn plum too. Not when pinned: pinned labels sit inline with no tag background. */
+html[data-bs-theme="dark"]:not(.nav-pinned) .site-nav ::deep .nav-label {
+    background: #2c2340;
+    color: #f1edf8;
+}
+
 @media (max-width: 640.98px) {
     /* Tighter so the icon-only bar fits one row on a phone. */
     .site-nav-inner {
@@ -224,6 +270,13 @@ html.nav-pinned .site-nav ::deep .nav-link:focus-visible .nav-label {
     .site-nav ::deep .nav-link {
         min-width: 2rem;
         padding: 0 0.35rem;
+    }
+}
+
+/* Narrow phones: drop the "Maroos" text so all nine icons fit one row (the Home icon links to the same place). */
+@media (max-width: 420px) {
+    .site-brand {
+        display: none;
     }
 }
 

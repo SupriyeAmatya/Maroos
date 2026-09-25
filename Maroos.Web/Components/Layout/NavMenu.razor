@@ -2,8 +2,9 @@
    FILE: Maroos.Web/Components/Layout/NavMenu.razor
    PURPOSE: The sticky navigation bar at the top of every page (rendered by MainLayout.razor).
    Left: the "Maroos" name, then Home, Search, Decks, Auctions and Profile. Right: Account + Log out for
-   signed-in users, or Register + Log in for visitors, and the pin button.
-   Styles: NavMenu.razor.css (icons, hover labels, pinned mode, phone widths). Pin: wwwroot/nav.js.
+   signed-in users, or Register + Log in for visitors, then the dark mode toggle and the pin button.
+   Styles: NavMenu.razor.css (icons, hover labels, pinned mode, dark bar, phone widths).
+   Scripts: the pin is wwwroot/nav.js; the dark mode toggle is wwwroot/theme.js.
    ===================================================================================================== *@
 @* Top navigation bar. Icons only until you point at (or tab to) one, which shows its label below it; the pin
    (wwwroot/nav.js) keeps every label visible and remembers the choice in this browser. Labels are always in the
@@ -83,6 +84,15 @@
                     </li>
                 </NotAuthorized>
             </AuthorizeView>
+            @* Dark mode toggle: a moon in light mode, a sun in dark mode (NavMenu.razor.css swaps the icon).
+               A plain button, not a Blazor event: this layout is static, so theme.js handles the click, flips
+               data-bs-theme on <html>, saves the choice in localStorage and sets aria-pressed ("on" = dark).
+               data-theme-toggle is how theme.js finds it. *@
+            <li>
+                <button type="button" class="nav-link nav-theme" data-theme-toggle aria-pressed="false">
+                    <span class="nav-icon icon-theme" aria-hidden="true"></span><span class="nav-label">Dark mode</span>
+                </button>
+            </li>
             @* The pin: "Always show labels". data-nav-pin is how nav.js finds it; aria-pressed tells screen
                readers whether it's on (nav.js keeps it in step with the saved choice). *@
             <li>

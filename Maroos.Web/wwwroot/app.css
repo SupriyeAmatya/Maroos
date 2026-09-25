@@ -2,12 +2,165 @@
    FILE: Maroos.Web/wwwroot/app.css
    PURPOSE: The site-wide stylesheet (on top of Bootstrap 5). Sections: template basics, Cards, Decks,
    Deck stats and legality, Auctions, Bidding, Footer, Home. Layouts use CSS grid/flex and adapt to
-   phone widths. The site is light-only; chart colors are variables so a dark theme could swap them.
+   phone widths. Light and dark mode: every color is a CSS variable (--maroos-*, Bootstrap's --bs-*, the chart's
+   --viz-*) with its light value in :root and its dark value under [data-bs-theme="dark"] (wwwroot/theme.js
+   sets that attribute on <html>). New colors go in both places.
    The top navigation bar has its own styles in Components/Layout/NavMenu.razor.css.
    ===================================================================================================== */
 /* Height of the sticky top navigation bar (NavMenu); sticky page elements sit below it. */
 :root {
     --site-nav-height: 3.5rem;
+
+    /* Site colors. Light values here; the dark mode block below swaps them (wwwroot/theme.js sets the theme). */
+    /* Each value is exactly the color the light site used before dark mode, so light mode looks unchanged.
+       link/primary: links and the main button; focus-*: the two rings of the focus outline; danger-text:
+       validation messages; placeholder-*: the grey box shown when a card has no image; border/border-soft:
+       dividers; row-hover/tile-bg: hovered deck rows and empty photo tiles; qty: deck quantities; issue:
+       legality problems; muted: secondary text; hover-shadow: the lift on hovered tiles. */
+    --maroos-link: #006bb7;
+    --maroos-primary-text: #fff;
+    --maroos-primary-bg: #1b6ec2;
+    --maroos-primary-border: #1861ac;
+    --maroos-focus-inner: white;
+    --maroos-focus-outer: #258cfb;
+    --maroos-danger-text: #e50000;
+    --maroos-checkbox-border: #929292;
+    --maroos-placeholder-bg: #e9ecef;
+    --maroos-placeholder-text: #212529;
+    --maroos-border: #dee2e6;
+    --maroos-border-soft: #e9ecef;
+    --maroos-row-hover: #f1f3f5;
+    --maroos-tile-bg: #f1f3f5;
+    --maroos-qty: #495057;
+    --maroos-issue: #b02a37;
+    --maroos-muted: #6c757d;
+    --maroos-hover-shadow: 0 2px 10px rgb(0 0 0 / 0.15);
+}
+
+/* Dark mode: "Midnight plum". Bootstrap 5.3 switches its components on data-bs-theme="dark"; these override its
+   dark colors with purplish blacks, then set the site colors above. Text colors meet WCAG AA contrast (4.5:1). */
+[data-bs-theme="dark"] {
+    /* Bootstrap's own variables. Page background and text first; each color also has an "-rgb" twin
+       (e.g. 18, 15, 24) because Bootstrap builds see-through versions from it, like rgba(var(--bs-body-bg-rgb), .5). */
+    --bs-body-bg: #120f18;
+    --bs-body-bg-rgb: 18, 15, 24;
+    --bs-body-color: #f1edf8;
+    --bs-body-color-rgb: 241, 237, 248;
+    --bs-emphasis-color: #ffffff;
+    --bs-emphasis-color-rgb: 255, 255, 255;
+    --bs-heading-color: #f1edf8;
+    /* secondary/tertiary: Bootstrap's muted text (.text-body-secondary) and its raised surfaces (.bg-body-tertiary). */
+    --bs-secondary-color: #a79fb9;
+    --bs-secondary-color-rgb: 167, 159, 185;
+    --bs-secondary-bg: #231d30;
+    --bs-secondary-bg-rgb: 35, 29, 48;
+    --bs-tertiary-color: #8a8199;
+    --bs-tertiary-color-rgb: 138, 129, 153;
+    --bs-tertiary-bg: #1b1724;
+    --bs-tertiary-bg-rgb: 27, 23, 36;
+    /* Borders: a dark plum line; the "translucent" one is a faint lavender used on cards and dropdowns. */
+    --bs-border-color: #2e2640;
+    --bs-border-color-translucent: rgba(198, 179, 255, 0.14);
+    /* Links: light lavender (about 10:1 contrast on the page), a little lighter on hover. <code> text: pink-violet. */
+    --bs-link-color: #c6b3ff;
+    --bs-link-color-rgb: 198, 179, 255;
+    --bs-link-hover-color: #ddd0ff;
+    --bs-link-hover-color-rgb: 221, 208, 255;
+    --bs-code-color: #e7a6ff;
+
+    /* The site's own colors, dark versions. The primary button is #7657e0 with white text (5.0:1); a lighter
+       purple looked nicer but fell to 3.8:1, below the 4.5:1 readability minimum. Focus rings: page-colored
+       inner ring, violet outer ring. Hovered tiles get a thin violet outline instead of a shadow. */
+    --maroos-link: #c6b3ff;
+    --maroos-primary-text: #fff;
+    --maroos-primary-bg: #7657e0;
+    --maroos-primary-border: #7657e0;
+    --maroos-focus-inner: #120f18;
+    --maroos-focus-outer: #a78bfa;
+    --maroos-danger-text: #ff7b7b;
+    --maroos-checkbox-border: #6d6180;
+    --maroos-placeholder-bg: #231d30;
+    --maroos-placeholder-text: #d9d2e6;
+    --maroos-border: #2e2640;
+    --maroos-border-soft: #2a2338;
+    --maroos-row-hover: #231d30;
+    --maroos-tile-bg: #231d30;
+    --maroos-qty: #c9c1d8;
+    --maroos-issue: #ff8f9a;
+    --maroos-muted: #a79fb9;
+    --maroos-hover-shadow: 0 0 0 1px #4a3d66;
+}
+
+/* Dark mode: cards, lists and form fields sit one step above the page. */
+/* (#1b1724 on a #120f18 page separates them without heavy borders. Bootstrap cards read their background
+   from --bs-card-bg.) */
+[data-bs-theme="dark"] .card {
+    --bs-card-bg: #1b1724;
+}
+
+/* Card lists (search results, profile tabs): same surface; the selected item is plum. */
+[data-bs-theme="dark"] .list-group {
+    --bs-list-group-bg: #1b1724;
+    --bs-list-group-active-bg: #7657e0;
+    --bs-list-group-active-border-color: #7657e0;
+}
+
+/* Text boxes and drop-downs: one step above the page, so they read as fields. */
+[data-bs-theme="dark"] .form-control,
+[data-bs-theme="dark"] .form-select {
+    background-color: #1b1724;
+}
+
+/* Ticked checkboxes (e.g. "Public deck", "Email me about my auctions"): plum instead of Bootstrap's blue. */
+[data-bs-theme="dark"] .form-check-input:checked {
+    background-color: #7657e0;
+    border-color: #7657e0;
+}
+
+/* Dark mode buttons: plum primary, lavender outlines, readable grey outlines. */
+/* Bootstrap 5.3 buttons read their colors from --bs-btn-* variables, so overriding the variables restyles
+   every state (hover, active, disabled). */
+[data-bs-theme="dark"] .btn-primary {
+    --bs-btn-color: #fff;
+    --bs-btn-bg: #7657e0;
+    --bs-btn-border-color: #7657e0;
+    --bs-btn-hover-color: #fff;
+    --bs-btn-hover-bg: #6a4bd6;
+    --bs-btn-hover-border-color: #6a4bd6;
+    --bs-btn-active-color: #fff;
+    --bs-btn-active-bg: #5e40c7;
+    --bs-btn-active-border-color: #5e40c7;
+    --bs-btn-disabled-bg: #7657e0;
+    --bs-btn-disabled-border-color: #7657e0;
+}
+
+/* Outline buttons ("Import", "Watch"): lavender text and a plum border; filled plum on hover. */
+[data-bs-theme="dark"] .btn-outline-primary {
+    --bs-btn-color: #c6b3ff;
+    --bs-btn-border-color: #7657e0;
+    --bs-btn-hover-color: #fff;
+    --bs-btn-hover-bg: #7657e0;
+    --bs-btn-hover-border-color: #7657e0;
+    --bs-btn-active-color: #fff;
+    --bs-btn-active-bg: #6a4bd6;
+    --bs-btn-active-border-color: #6a4bd6;
+}
+
+/* Grey outline buttons ("Cancel", "-" / "+" quantity buttons): a lighter grey than Bootstrap's so they stay readable. */
+[data-bs-theme="dark"] .btn-outline-secondary {
+    --bs-btn-color: #c9c1d8;
+    --bs-btn-border-color: #4a3d66;
+    --bs-btn-hover-color: #f1edf8;
+    --bs-btn-hover-bg: #2c2340;
+    --bs-btn-hover-border-color: #5b4b7c;
+    --bs-btn-active-color: #f1edf8;
+    --bs-btn-active-bg: #3a2e52;
+    --bs-btn-active-border-color: #5b4b7c;
+}
+
+/* Red outline buttons ("Delete deck"): a softer red that is still readable on the dark page. */
+[data-bs-theme="dark"] .btn-outline-danger {
+    --bs-btn-color: #ff8f9a;
 }
 
 /* Lines up to the "Cards" section come from the Blazor template (fonts, focus outlines, validation colors, error boundary). */
@@ -16,17 +169,17 @@ html, body {
 }
 
 a, .btn-link {
-    color: #006bb7;
+    color: var(--maroos-link);
 }
 
 .btn-primary {
-    color: #fff;
-    background-color: #1b6ec2;
-    border-color: #1861ac;
+    color: var(--maroos-primary-text);
+    background-color: var(--maroos-primary-bg);
+    border-color: var(--maroos-primary-border);
 }
 
 .btn:focus, .btn:active:focus, .btn-link.nav-link:focus, .form-control:focus, .form-check-input:focus {
-  box-shadow: 0 0 0 0.1rem white, 0 0 0 0.25rem #258cfb;
+  box-shadow: 0 0 0 0.1rem var(--maroos-focus-inner), 0 0 0 0.25rem var(--maroos-focus-outer);
 }
 
 .content {
@@ -46,7 +199,7 @@ h1:focus {
 }
 
 .validation-message {
-    color: #e50000;
+    color: var(--maroos-danger-text);
 }
 
 .blazor-error-boundary {
@@ -60,7 +213,7 @@ h1:focus {
     }
 
 .darker-border-checkbox.form-check-input {
-    border-color: #929292;
+    border-color: var(--maroos-checkbox-border);
 }
 
 .form-floating > .form-control-plaintext::placeholder, .form-floating > .form-control::placeholder {
@@ -107,8 +260,8 @@ h1:focus {
     justify-content: center;
     padding: 1rem;
     text-align: center;
-    background: #e9ecef;
-    color: #212529;
+    background: var(--maroos-placeholder-bg);
+    color: var(--maroos-placeholder-text);
 }
 
 /* Card page (/card/{id}): image column + details column. */
@@ -132,7 +285,7 @@ h1:focus {
 }
 
 .card-face + .card-face {
-    border-top: 1px solid #dee2e6;
+    border-top: 1px solid var(--maroos-border);
     padding-top: 1rem;
 }
 
@@ -218,7 +371,7 @@ h1:focus {
 }
 
 .deck-group-heading {
-    border-bottom: 1px solid #dee2e6;
+    border-bottom: 1px solid var(--maroos-border);
     padding-bottom: 0.25rem;
     margin-bottom: 0.25rem;
 }
@@ -233,14 +386,14 @@ h1:focus {
 }
 
 .deck-row:hover {
-    background: #f1f3f5;
+    background: var(--maroos-row-hover);
 }
 
 .deck-row-qty {
     min-width: 1.75rem;
     text-align: right;
     font-variant-numeric: tabular-nums;
-    color: #495057;
+    color: var(--maroos-qty);
 }
 
 .deck-row-name {
@@ -313,7 +466,7 @@ h1:focus {
 
 /* Keyboard focus: a clear outline around the whole card. */
 a.deck-card-tile:focus-visible {
-    outline: 2px solid #258cfb;
+    outline: 2px solid var(--maroos-focus-outer);
     outline-offset: 2px;
 }
 
@@ -416,12 +569,12 @@ a.deck-card-tile:focus-visible {
     --viz-axis: #c9c8c2;
 }
 
-/* The site follows Bootstrap's theme, not the OS: dark steps apply only when the page opts into dark. */
+/* Dark chart colors follow the page's theme (data-bs-theme, set by wwwroot/theme.js). */
 [data-bs-theme="dark"] .viz-root {
-    --viz-series-1: #3987e5;
-    --viz-text-primary: #ffffff;
-    --viz-text-secondary: #c3c2b7;
-    --viz-axis: #4a4945;
+    --viz-series-1: #a78bfa;
+    --viz-text-primary: #f1edf8;
+    --viz-text-secondary: #a79fb9;
+    --viz-axis: #3a3050;
 }
 
 .deck-stats {
@@ -515,7 +668,7 @@ a.deck-card-tile:focus-visible {
 }
 
 .deck-row-issue .deck-row-name {
-    color: #b02a37;
+    color: var(--maroos-issue);
 }
 
 .deck-colors th,
@@ -539,12 +692,12 @@ a.deck-card-tile:focus-visible {
 }
 
 .auction-tile:hover {
-    box-shadow: 0 2px 10px rgb(0 0 0 / 0.15);
+    box-shadow: var(--maroos-hover-shadow);
 }
 
 .auction-tile-image {
     aspect-ratio: 488 / 680;
-    background: #f1f3f5;
+    background: var(--maroos-tile-bg);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -566,7 +719,7 @@ a.deck-card-tile:focus-visible {
 .auction-tile-meta,
 .auction-tile-time {
     font-size: 0.8rem;
-    color: #6c757d;
+    color: var(--maroos-muted);
 }
 
 .auction-tile-price {
@@ -608,7 +761,7 @@ a.deck-card-tile:focus-visible {
 
 .auction-facts dt {
     font-weight: normal;
-    color: #6c757d;
+    color: var(--maroos-muted);
 }
 
 .auction-facts dd {
@@ -706,7 +859,7 @@ a.deck-card-tile:focus-visible {
     gap: 0.75rem;
     align-items: baseline;
     padding: 0.25rem 0;
-    border-bottom: 1px solid #e9ecef;
+    border-bottom: 1px solid var(--maroos-border-soft);
 }
 
 .bid-history-row:first-child {
@@ -727,9 +880,9 @@ a.deck-card-tile:focus-visible {
     margin-top: 3rem;
     padding-top: 1rem;
     padding-bottom: 1.5rem;
-    border-top: 1px solid #dee2e6;
+    border-top: 1px solid var(--maroos-border);
     font-size: 0.8rem;
-    color: #6c757d;
+    color: var(--maroos-muted);
 }
 
 .site-footer a {
@@ -755,5 +908,5 @@ a.deck-card-tile:focus-visible {
 }
 
 .home-link:hover {
-    box-shadow: 0 2px 10px rgb(0 0 0 / 0.15);
+    box-shadow: var(--maroos-hover-shadow);
 }
