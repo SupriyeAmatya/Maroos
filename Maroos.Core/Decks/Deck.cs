@@ -32,8 +32,8 @@ public class Deck
     // Name: what the owner called the deck, e.g. "Mono-Red Burn".
     public string Name { get; set; } = "";
 
-    /// <summary>A Scryfall legality key, e.g. <c>modern</c> or <c>commander</c>.</summary>
     // Format: which format the deck is for. Used to check legality and deck-size rules.
+    /// <summary>A Scryfall legality key, e.g. <c>modern</c> or <c>commander</c>.</summary>
     public string Format { get; set; } = DeckFormats.Default;
 
     // IsPublic: true = anyone with the link can view it; false = only the owner (others see "not found").
@@ -42,13 +42,18 @@ public class Deck
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 
+    // CopiedFromDeckId: the original deck when this one is a copy (set by DeckService.CopyAsync). The database
+    // clears it (ON DELETE SET NULL) when the original is deleted, so a copy never points at a missing deck.
+    /// <summary>The deck this one was copied from, if any. Cleared (set to null) when that deck is deleted.</summary>
+    public Guid? CopiedFromDeckId { get; set; }
+
     // Cards: the deck's card lines. `[]` starts it as an empty list. EF fills it when asked to Include(d => d.Cards).
     public List<DeckCard> Cards { get; set; } = [];
 }
 
-/// <summary>One card (a specific Scryfall printing) on one board of a deck.</summary>
 // DeckCard: "N copies of this printing on this board". Its database key is (DeckId, ScryfallId, Board),
 // so the same printing can appear once in the main deck and once in the sideboard.
+/// <summary>One card (a specific Scryfall printing) on one board of a deck.</summary>
 public class DeckCard
 {
     // MaxQuantity: a sanity cap on copies per line.

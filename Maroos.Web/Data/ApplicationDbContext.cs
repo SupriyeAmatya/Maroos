@@ -88,6 +88,8 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>, IDataPro
             deck.HasOne<ApplicationUser>().WithMany().HasForeignKey(d => d.OwnerId).OnDelete(DeleteBehavior.Cascade);
             deck.HasMany(d => d.Cards).WithOne().HasForeignKey(c => c.DeckId).OnDelete(DeleteBehavior.Cascade);
             deck.HasIndex(d => new { d.OwnerId, d.UpdatedAt });
+            // A copy keeps pointing at its original until the original is deleted; then the copy just loses its credit.
+            deck.HasOne<Deck>().WithMany().HasForeignKey(d => d.CopiedFromDeckId).OnDelete(DeleteBehavior.SetNull);
         });
 
         // Deck cards: a "composite key" — one row per (deck, printing, board). The same card in the main

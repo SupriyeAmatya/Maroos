@@ -7,6 +7,8 @@
 
 using System.Text.RegularExpressions;
 using Maroos.Tests.Auth;
+using Maroos.Web.Services;
+using Microsoft.Extensions.DependencyInjection;
 using static Maroos.Tests.Auth.PageForms;
 
 namespace Maroos.Tests.Decks;
@@ -109,5 +111,28 @@ public partial class DeckPagesHttpTests : IClassFixture<MaroosWebFactory>, IAsyn
 
         Assert.Contains("Open Burn", html);
         Assert.DoesNotContain("Deck not found", html);
+    }
+
+    // TEST: A public deck renders its picture views for visitors.
+    // DeckService is a scoped service, so the test takes it from a scope rather than the root provider.
+    [Fact]
+    public async Task A_public_deck_renders_its_picture_views_for_visitors()
+    {
+        var owner = await SignedInBrowserAsync();
+        var deckUrl = (await CreateDeckAsync(owner, "Picture Burn", isPublic: true)).RequestMessage!.RequestUri!.AbsolutePath;
+        var id = Guid.Parse(DeckUrl().Match(deckUrl).Groups[1].Value);
+        using var scope = _factory.Services.CreateScope();
+        var decks = scope.ServiceProvider.GetRequiredService<DeckService>();
+        var ownerId = (await decks.GetAsync(id, viewerId: null))!.Deck.OwnerId;
+        await decks.ImportAsync(id, ownerId, "4 Lightning Bolt\n20 Mountain", replace: false);
+
+        var visitor = _factory.NewBrowser();
+        var grid = await visitor.GetStringAsync(deckUrl + "?view=grid");
+        var stacks = await visitor.GetStringAsync(deckUrl + "?view=stacks");
+
+        Assert.Contains("class=\"deck-grid\"", grid);
+        Assert.Contains("Lightning Bolt, 4 copies", grid);
+        Assert.Contains("class=\"deck-stacks\"", stacks);
+        Assert.Contains("Log in to copy", grid);
     }
 }

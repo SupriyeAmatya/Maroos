@@ -1,0 +1,49 @@
+@* =====================================================================================================
+   FILE: Maroos.Web/Components/Decks/DeckCardTile.razor
+   PURPOSE: One card as a picture, used by the Stacks and Grid views and by the sample hand.
+   ACCESSIBILITY: the linked tile's aria-label says "Lightning Bolt, 4 copies"; the ×4 badge is only visual
+   (aria-hidden), so screen readers don't read "times four". Images are lazy-loaded (only fetched near the screen).
+   ===================================================================================================== *@
+@* One card as a picture: its front image (or a name tile when Scryfall has none) and a ×N badge for several copies.
+   Used by the Stacks and Grid views (linked to the card page) and the sample hand (not linked, so a click keeps the hand). *@
+
+@* Linked: open the card's page on click. Not linked: a plain picture (the sample hand stays open). *@
+@if (Linked)
+{
+    <a class="deck-card-tile" href="card/@Entry.Line.ScryfallId" aria-label="@Label">@Picture</a>
+}
+else
+{
+    <span class="deck-card-tile">@Picture</span>
+}
+
+@code {
+    // Entry: the card line and its Scryfall data. EditorRequired: the compiler warns if a page forgets it.
+    [Parameter, EditorRequired] public DeckEntry Entry { get; set; } = default!;
+
+    /// <summary>Copies to show on the badge; 1 or less shows none.</summary>
+    [Parameter] public int Quantity { get; set; } = 1;
+
+    [Parameter] public bool Linked { get; set; } = true;
+
+    // Label: what screen readers hear for a linked tile.
+    private string Label => Quantity > 1 ? $"{Entry.Line.CardName}, {Quantity} copies" : Entry.Line.CardName;
+
+    // Picture: the image (front face) or a name tile when Scryfall has no image, plus the ×N badge.
+    // Written once as a RenderFragment and used by both the linked and the plain version above.
+    private RenderFragment Picture => __builder =>
+    {
+        @if (Entry.Card?.FrontImage?.Normal is { } image)
+        {
+            <img src="@image" alt="@Entry.Line.CardName" loading="lazy" />
+        }
+        else
+        {
+            <span class="card-grid-placeholder">@Entry.Line.CardName</span>
+        }
+        @if (Quantity > 1)
+        {
+            <span class="deck-card-qty" aria-hidden="true">@($"×{Quantity}")</span>
+        }
+    };
+}

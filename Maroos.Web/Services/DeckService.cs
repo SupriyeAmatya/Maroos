@@ -13,6 +13,12 @@
 //   3. One batched Scryfall lookup for all lines (75 per request).
 //   4. Printings Scryfall didn't know get a second lookup by name.
 //   5. Found cards are added; the rest are reported back as "not found" / "unreadable".
+//
+// COPY PROCESS (CopyAsync)
+//   1. Signed-out callers can't copy; someone else's private deck counts as "not found".
+//   2. A new private deck "Copy of <name>" with the same format and card lines, pointing back at the original
+//      (CopiedFromDeckId), all in one save.
+//   3. GetAsync shows the credit ("Copied from <deck> by <name>") only while the viewer can still see the original.
 // =====================================================================================================
 
 using Maroos.Core.Decks;
@@ -25,8 +31,14 @@ namespace Maroos.Web.Services;
 // DeckSummary: one row of "My decks" (counts are totals of quantities: main+commander vs. sideboard).
 public sealed record DeckSummary(Guid Id, string Name, string Format, bool IsPublic, int MainCount, int SideCount, DateTime UpdatedAt);
 
+// DeckCopySource: what the "Copied from <deck> by <name>" line needs. OwnerName is the public display name, never an email.
+/// <summary>Credit for a copied deck: the original, and its owner's public name.</summary>
+public sealed record DeckCopySource(Guid DeckId, string DeckName, string OwnerName);
+
 // DeckView: a deck ready to display — its cards paired with Scryfall data (DeckEntry), plus derived info.
-public sealed record DeckView(Deck Deck, bool IsOwner, IReadOnlyList<DeckEntry> Entries)
+// CopiedFrom is null unless this deck is a copy whose original the viewer can still see.
+/// <param name="CopiedFrom">The original this deck was copied from, when it still exists and the viewer can see it.</param>
+public sealed record DeckView(Deck Deck, bool IsOwner, IReadOnlyList<DeckEntry> Entries, DeckCopySource? CopiedFrom = null)
 {
     // Stats: mana curve, colors, types, total price (computed once when the view is created).
     public DeckStats Stats { get; } = DeckStats.Compute(Entries);
@@ -46,6 +58,10 @@ public sealed record DeckImportResult(int CardsAdded, IReadOnlyList<string> NotF
 
 /// <summary>Thrown when someone other than the owner tries to change a deck.</summary>
 public sealed class DeckAccessException() : Exception("Only the deck's owner can change it.");
+
+// DeckNotFoundException: thrown by CopyAsync. The page shows its message as it is, so it's worded for players.
+/// <summary>Thrown when a deck doesn't exist or is private to someone else (the two look the same on purpose).</summary>
+public sealed class DeckNotFoundException() : Exception("This deck doesn't exist, or it's private.");
 
 /// <summary>Creates, edits, imports and exports decks. Every change checks that the caller owns the deck.</summary>
 public sealed class DeckService(IDbContextFactory<ApplicationDbContext> dbFactory, CardService cards, TimeProvider clock)
@@ -113,7 +129,72 @@ public sealed class DeckService(IDbContextFactory<ApplicationDbContext> dbFactor
             .Select(c => new DeckEntry(c, cardData.GetValueOrDefault(c.ScryfallId)))
             .ToList();
 
-        return new DeckView(deck, isOwner, entries);
+        // Step 5: for a copy, look up the original's credit (one extra query, and only for copies).
+        var copiedFrom = deck.CopiedFromDeckId is { } sourceId ? await CopySourceAsync(sourceId, viewerId, ct) : null;
+        return new DeckView(deck, isOwner, entries, copiedFrom);
+    }
+
+    /// <summary>
+    /// Copies a deck the caller can see (someone's public deck, or one of their own) into a new private deck they own,
+    /// named "Copy of …" and remembering where it came from. Returns the new deck's id.
+    /// </summary>
+    public async Task<Guid> CopyAsync(Guid sourceId, string userId, CancellationToken ct = default)
+    {
+        // Step 1: signed-out callers can't copy (the page shows them a login link instead).
+        if (string.IsNullOrEmpty(userId))
+            throw new DeckAccessException();
+
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        // Step 2: load the original with its cards. Same visibility rule as viewing: someone else's private deck is
+        // "not found", so guessing a deck id reveals nothing.
+        var source = await db.Decks.AsNoTracking().Include(d => d.Cards).FirstOrDefaultAsync(d => d.Id == sourceId, ct);
+        if (source is null || (!source.IsPublic && source.OwnerId != userId))
+            throw new DeckNotFoundException();
+
+        var now = clock.GetUtcNow().UtcDateTime;
+        // Step 3: the new deck: private, owned by the caller, "Copy of …" (CleanName cuts it to 100 characters),
+        // and pointing back at the original.
+        var copy = new Deck
+        {
+            OwnerId = userId,
+            Name = CleanName("Copy of " + source.Name),
+            Format = source.Format,
+            IsPublic = false,
+            CopiedFromDeckId = source.Id,
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+        // Step 4: clone every card line (board, quantity, exact printing). New DeckCard objects, so EF inserts new rows.
+        copy.Cards.AddRange(source.Cards.Select(c => new DeckCard
+        {
+            DeckId = copy.Id,
+            ScryfallId = c.ScryfallId,
+            Board = c.Board,
+            CardName = c.CardName,
+            Quantity = c.Quantity,
+            SetCode = c.SetCode,
+            CollectorNumber = c.CollectorNumber,
+        }));
+
+        // Step 5: one save writes the deck and all its cards together.
+        db.Decks.Add(copy);
+        await db.SaveChangesAsync(ct);
+        return copy.Id;
+    }
+
+    /// <summary>The original deck's name and owner, or null when it's gone or the viewer can't see it (one query).</summary>
+    private async Task<DeckCopySource?> CopySourceAsync(Guid sourceId, string? viewerId, CancellationToken ct)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        // One query: the deck joined to its owner, and only if the viewer may see it (public, or their own).
+        // Otherwise null, so a private original's name never leaks through a copy.
+        var source = await (
+                from d in db.Decks
+                join u in db.Users on d.OwnerId equals u.Id
+                where d.Id == sourceId && (d.IsPublic || d.OwnerId == viewerId)
+                select new { d.Id, d.Name, u.DisplayName })
+            .FirstOrDefaultAsync(ct);
+        return source is null ? null : new DeckCopySource(source.Id, source.Name, ApplicationUser.PublicName(source.DisplayName));
     }
 
     // UpdateSettingsAsync: rename, change format, public/private (owner only, via EditAsync).
@@ -137,8 +218,8 @@ public sealed class DeckService(IDbContextFactory<ApplicationDbContext> dbFactor
         await WatchService.RemoveAllAsync(db, Core.Watchlist.WatchTarget.Deck, deckId, ct);
     }
 
-    /// <summary>Adds copies of a card by exact name. Returns the card's Scryfall name, or null if Scryfall has no such card.</summary>
     // AddCardAsync: the deck page's "Add card" box (with autocomplete).
+    /// <summary>Adds copies of a card by exact name. Returns the card's Scryfall name, or null if Scryfall has no such card.</summary>
     public async Task<string?> AddCardAsync(Guid deckId, string ownerId, string cardName, Board board, int quantity = 1, CancellationToken ct = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
@@ -155,8 +236,8 @@ public sealed class DeckService(IDbContextFactory<ApplicationDbContext> dbFactor
         return card.Name;
     }
 
-    /// <summary>Changes a card's count by <paramref name="delta"/>; at zero the card is removed.</summary>
     // AdjustQuantityAsync: the + / − buttons next to each card (delta = +1 or −1).
+    /// <summary>Changes a card's count by <paramref name="delta"/>; at zero the card is removed.</summary>
     public Task AdjustQuantityAsync(Guid deckId, string ownerId, Guid scryfallId, Board board, int delta, CancellationToken ct = default) =>
         EditAsync(deckId, ownerId, deck =>
         {

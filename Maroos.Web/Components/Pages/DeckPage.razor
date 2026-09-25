@@ -2,11 +2,14 @@
    FILE: Maroos.Web/Components/Pages/DeckPage.razor      URL: /decks/{id}
    PURPOSE: The deck builder (Moxfield-style). One page for both viewing and editing:
      * Header: name, format, public/private, legality badge ("✓ Legal" or "⚠ 3 issues"), card counts, price.
-     * Toolbar: Import (owner) · Export (anyone) · Settings (owner: rename, format, visibility, delete).
+     * Toolbar: Import (owner) · Export (anyone) · Settings (owner: rename, format, visibility, delete) ·
+       Sample hand (anyone) · Copy deck / Duplicate (signed in) or "Log in to copy" · the List/Stacks/Grid switch.
      * Add card (owner): the shared autocomplete + a Main/Sideboard/Commander picker.
      * Legality issues list (from DeckRules).
      * Card list grouped Commander → Creatures, Instants, ... → Sideboard, with mana costs, +/− buttons
        (owner), and a card image preview that follows the mouse.
+     * Stacks and Grid views (?view=stacks|grid): the same groups as card pictures (Components/Decks/DeckPictures).
+     * "Copied from <deck> by <name>" under the header when this deck is a copy and the original is visible.
      * DeckStatsPanel: curve, colors, types, price.
    WHO SEES WHAT: anyone can view a PUBLIC deck (and watch it); only the owner sees edit controls; a private
    deck of someone else shows "Deck not found". DeckService enforces the same rules on every change.
@@ -81,6 +84,11 @@ else
                 <span> · @Money.FormatUsd(view.Stats.TotalPriceCents)</span>
             }
         </p>
+        @* Credit line for copies. CopiedFrom is null when the original is gone or private, so nothing shows then. *@
+        @if (view.CopiedFrom is { } source)
+        {
+            <p class="deck-credit text-muted mb-0 mt-1">Copied from <a href="decks/@source.DeckId">@source.DeckName</a> by @source.OwnerName</p>
+        }
     </header>
 
     @* ---- Toolbar: each button opens/closes one panel (aria-expanded tells screen readers which is open). ---- *@
@@ -94,7 +102,33 @@ else
         {
             <button type="button" class="btn btn-outline-secondary @(panel == Panel.Settings ? "active" : "")" aria-expanded="@(panel == Panel.Settings)" @onclick="() => Toggle(Panel.Settings)">Settings</button>
         }
+        @* Sample hand: anyone who can see the deck can practise draws. *@
+        <button type="button" class="btn btn-outline-secondary @(panel == Panel.SampleHand ? "active" : "")" aria-expanded="@(panel == Panel.SampleHand)" @onclick="() => Toggle(Panel.SampleHand)">Sample hand</button>
+        @* Copy: visitors get a link to log in (and come back here); signed-in players copy, owners "Duplicate". *@
+        @if (userId is null)
+        {
+            <a class="btn btn-outline-secondary deck-copy-login" href="@LoginToCopyUrl">Log in to copy</a>
+        }
+        else
+        {
+            <button type="button" class="btn btn-outline-secondary" disabled="@busy" @onclick="CopyAsync">@(view.IsOwner ? "Duplicate" : "Copy deck")</button>
+        }
+        @* View switch: plain links that set ?view=, so a view can be bookmarked or shared and Back works.
+           aria-current="page" tells screen readers which view is showing. *@
+        <nav class="btn-group deck-view-switch ms-auto" aria-label="Card view">
+            @foreach (var option in Enum.GetValues<DeckViewMode>())
+            {
+                <a class="btn btn-outline-secondary @(option == mode ? "active" : "")" href="@ViewUrl(option)" aria-current="@(option == mode ? "page" : null)">@option</a>
+            }
+        </nav>
     </div>
+
+    @* ---- Sample hand panel (anyone who can see the deck). A separate component: closing the panel removes it,
+       which throws the hand away. ---- *@
+    @if (panel == Panel.SampleHand)
+    {
+        <SampleHandPanel Entries="view.Entries" />
+    }
 
     @* ---- Import panel (owner): paste a list, choose Add or Replace ---- *@
     @if (panel == Panel.Import && view.IsOwner)
@@ -233,26 +267,22 @@ else
     {
         <p class="text-muted">No cards yet. @(view.IsOwner ? "Add cards above or import a list." : "")</p>
     }
+    @* Stacks or Grid: card pictures only (editing stays in the list view), then the stats. *@
+    else if (mode != DeckViewMode.List)
+    {
+        <DeckPictures Groups="DeckGroups.For(view.Entries)" Mode="mode" />
+
+        <DeckStatsPanel Stats="view.Stats" />
+    }
     else
     {
         <div class="deck-layout">
             <div class="deck-columns">
-                @* Commander first, then main-deck cards grouped by type in a fixed order, then sideboard. *@
-                @if (view.Count(Board.Commander) > 0)
+                @* Commander first, then main-deck cards grouped by type in a fixed order, then sideboard.
+                   DeckGroups.For (Maroos.Core) builds the groups, so the picture views use exactly the same ones. *@
+                @foreach (var group in DeckGroups.For(view.Entries))
                 {
-                    @Group("Commander", Board.Commander, EntriesOn(Board.Commander))
-                }
-                @foreach (var type in CardTypes.DisplayOrder)
-                {
-                    var entries = EntriesOn(Board.Main).Where(e => e.PrimaryType == type).ToList();
-                    if (entries.Count > 0)
-                    {
-                        @Group(CardTypes.GroupHeading(type), Board.Main, entries)
-                    }
-                }
-                @if (view.Count(Board.Side) > 0)
-                {
-                    @Group("Sideboard", Board.Side, EntriesOn(Board.Side))
+                    @Group(group)
                 }
             </div>
             @* Preview image: the hovered card, or the first card. Decorative, so hidden from screen readers. *@
@@ -269,16 +299,26 @@ else
 }
 
 @code {
-    // Panel: which toolbar panel is open.
-    private enum Panel { None, Import, Export, Settings }
+    // Panel: which toolbar panel is open (SampleHand: the sample hand).
+    private enum Panel { None, Import, Export, Settings, SampleHand }
 
     // Id: from the URL.
     [Parameter] public Guid Id { get; set; }
+
+    // View and Copied come from the query string ([SupplyParameterFromQuery]): /decks/{id}?view=stacks&copied=1.
+    /// <summary><c>?view=list|stacks|grid</c>: how the cards are shown (List when missing or unknown).</summary>
+    [SupplyParameterFromQuery] public string? View { get; set; }
+
+    /// <summary><c>?copied=1</c>: set by Copy deck, so the new copy greets its owner once.</summary>
+    [SupplyParameterFromQuery] public string? Copied { get; set; } // a string: a bool would crash on ?copied=anything-else
 
     [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
 
     // view: the deck for this viewer (null = loading or not found). userId: null when signed out.
     private DeckView? view;
+    // loadedId: which deck the page state belongs to. mode: the current view, parsed from View.
+    private Guid loadedId;
+    private DeckViewMode mode;
     private string? userId;
     private bool loading = true;
     // busy: an action is running (buttons disabled). panel: the open panel. preview: the hovered card.
@@ -309,10 +349,36 @@ else
     // OnParametersSetAsync: first load (and when the id changes).
     protected override async Task OnParametersSetAsync()
     {
+        // Step 1: a different deck than last time? Reset the per-deck state (panels, messages, preview).
+        // Opening another deck (e.g. a new copy) reuses this component: start with a clean slate.
+        if (Id != loadedId)
+        {
+            (panel, preview, status, importResult, confirmingDelete) = (Panel.None, null, null, null, false);
+            loadedId = Id;
+        }
+
+        // Step 2: read the view, the viewer, and the deck.
+        mode = DeckViewModes.Parse(View);
         userId = (await AuthState).User.GetUserId();
         await ReloadAsync();
         loading = false;
+
+        // Step 3: just copied? Say so once.
+        if (Copied == "1" && view is not null)
+        {
+            Succeed("Copied. This is your private copy.");
+            // Drop ?copied=1 so a reload or a shared link doesn't repeat the message.
+            Navigation.NavigateTo(Navigation.GetUriWithQueryParameter("copied", (string?)null), replace: true);
+        }
     }
+
+    // ViewUrl: this deck's address in a view; the List link has no query so the plain address stays the default.
+    // LoginToCopyUrl: visitors log in, then come straight back to this deck.
+    /// <summary>This deck's address in a given view (List needs no query).</summary>
+    private string ViewUrl(DeckViewMode option) =>
+        option == DeckViewMode.List ? $"decks/{Id}" : $"decks/{Id}?view={DeckViewModes.QueryValue(option)}";
+
+    private string LoginToCopyUrl => $"Account/Login?ReturnUrl={Uri.EscapeDataString($"/decks/{Id}")}";
 
     // ReloadAsync: fetch the deck again (after every change). Keeps the preview on the same card if it still exists.
     private async Task ReloadAsync()
@@ -322,23 +388,19 @@ else
             preview = view.Entries.FirstOrDefault(e => e.Line.ScryfallId == preview.Line.ScryfallId && e.Line.Board == preview.Line.Board);
     }
 
-    // EntriesOn: the cards on one board.
-    private IEnumerable<DeckEntry> EntriesOn(Board board) => view!.Entries.Where(e => e.Line.Board == board);
-
     /// <summary>The first card-level issue for this row's card, if any.</summary>
     private DeckIssue? IssueFor(DeckEntry entry) =>
         view!.Issues.FirstOrDefault(i => string.Equals(i.CardName, entry.Line.CardName, StringComparison.OrdinalIgnoreCase));
 
-    // Group: a reusable piece of markup ("RenderFragment") — one card group with its heading and rows.
+    // Group: a reusable piece of markup ("RenderFragment") — one card group (from DeckGroups) with its heading and rows.
     // `__builder =>` is the Razor convention for writing markup inside a C# method.
-    private RenderFragment Group(string heading, Board board, IEnumerable<DeckEntry> entries) => __builder =>
+    private RenderFragment Group(DeckGroup group) => __builder =>
     {
-        var list = entries.ToList();
         <section class="deck-group">
             @* Heading with the group's total, e.g. "Creatures (24)". *@
-            <h2 class="h6 deck-group-heading">@heading <span class="text-muted">(@list.Sum(e => e.Line.Quantity))</span></h2>
+            <h2 class="h6 deck-group-heading">@group.Heading <span class="text-muted">(@group.Count)</span></h2>
             <ul class="list-unstyled deck-group-list">
-                @foreach (var entry in list)
+                @foreach (var entry in group.Entries)
                 {
                     @* issue: e.g. "Banned" or "Too many copies" for this card (row turns red with a badge).
                        @key helps Blazor keep rows stable when the list changes; hovering sets the preview. *@
@@ -432,6 +494,27 @@ else
         busy = true;
         await DeckService.DeleteAsync(Id, userId!);
         Navigation.NavigateTo("decks");
+    }
+
+    // CopyAsync: Copy deck / Duplicate. The service makes the private copy; then open it with ?copied=1 so it
+    // greets its new owner once. A deck that went private or was deleted meanwhile shows a message instead.
+    private async Task CopyAsync()
+    {
+        busy = true;
+        status = null;
+        try
+        {
+            var copyId = await DeckService.CopyAsync(Id, userId!);
+            Navigation.NavigateTo($"decks/{copyId}?copied=1");
+        }
+        catch (Exception ex) when (ex is DeckNotFoundException or DeckAccessException)
+        {
+            Fail(ex.Message);
+        }
+        finally
+        {
+            busy = false;
+        }
     }
 
     // CopyExportAsync: copy the export text using the browser's clipboard API (may be blocked by the browser).

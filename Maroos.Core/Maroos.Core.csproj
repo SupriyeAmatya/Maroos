@@ -1,6 +1,10 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
+  <!-- Maroos.Core: the rules and models (Scryfall client, deck parser, deck rules and stats, bidding and
+     auction rules, email text). A plain class library: no web or database packages, so it's easy to test. -->
   <PropertyGroup>
+    <!-- net10.0: .NET 10. ImplicitUsings: common namespaces (System, System.Linq...) without using lines.
+     Nullable: the compiler warns when something that might be null is used as if it can't be. -->
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>

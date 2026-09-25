@@ -318,6 +318,17 @@ public sealed class QueryCountTests : IDisposable
         Assert.Equal(2, await CountAsync(() => _world.Decks.GetAsync(deck.Id, _seller))); // deck with cards + cached cards
     }
 
+    // TEST: A copied deck needs just one more query for its credit.
+    [Fact]
+    public async Task A_copied_deck_needs_just_one_more_query_for_its_credit()
+    {
+        var deck = await _world.Decks.CreateAsync(_seller, "Pile", "modern", isPublic: true);
+        await _world.Decks.ImportAsync(deck.Id, _seller, "4 Lightning Bolt\n4 Delver of Secrets\n1 Sol Ring\n51 Mountain", replace: false);
+        var copyId = await _world.Decks.CopyAsync(deck.Id, _bidders[0]);
+
+        Assert.Equal(3, await CountAsync(() => _world.Decks.GetAsync(copyId, _bidders[0]))); // + the original and its owner
+    }
+
     // TEST: Closing many auctions does not query each one.
     [Fact]
     public async Task Closing_many_auctions_does_not_query_each_one()

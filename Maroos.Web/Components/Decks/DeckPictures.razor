@@ -1,0 +1,35 @@
+@* =====================================================================================================
+   FILE: Maroos.Web/Components/Decks/DeckPictures.razor
+   PURPOSE: The Stacks and Grid views of a deck. The page passes DeckGroups.For(...) and the view; the
+   styles in app.css (.deck-stacks, .deck-grid) do the layout. No editing here: that stays in the list view.
+   ===================================================================================================== *@
+@* A deck as card pictures, in the same groups as the list view.
+   Stacks: each group is a column of overlapping cards (only the name bar shows until you point at or focus one).
+   Grid: each group's cards at full size. *@
+
+@* The container's class picks the layout: overlapping columns (deck-stacks) or a picture grid (deck-grid). *@
+<div class="@(Mode == DeckViewMode.Stacks ? "deck-stacks" : "deck-grid")">
+    @foreach (var group in Groups)
+    {
+        <section class="deck-picture-group" @key="group.Heading">
+            <h2 class="h6 deck-group-heading">@group.Heading <span class="text-muted">(@group.Count)</span></h2>
+            <ul class="list-unstyled deck-picture-list">
+                @foreach (var entry in group.Entries)
+                {
+                    @* @key: the same card on the same board keeps its element when the deck changes (no flicker). *@
+                    <li @key="(entry.Line.ScryfallId, entry.Line.Board)">
+                        <DeckCardTile Entry="entry" Quantity="entry.Line.Quantity" />
+                    </li>
+                }
+            </ul>
+        </section>
+    }
+</div>
+
+@code {
+    // Groups: the headings and their cards, in page order.
+    [Parameter, EditorRequired] public IReadOnlyList<DeckGroup> Groups { get; set; } = [];
+
+    /// <summary><see cref="DeckViewMode.Stacks"/> or <see cref="DeckViewMode.Grid"/>.</summary>
+    [Parameter] public DeckViewMode Mode { get; set; } = DeckViewMode.Stacks;
+}

@@ -1,4 +1,6 @@
 <Solution>
+  <!-- Maroos.slnx: the solution (the new XML .slnx format). It lists the three projects, so
+     "dotnet build Maroos.slnx" and "dotnet test Maroos.slnx" work on all of them at once. -->
   <Project Path="Maroos.Core/Maroos.Core.csproj" />
   <Project Path="Maroos.Tests/Maroos.Tests.csproj" />
   <Project Path="Maroos.Web/Maroos.Web.csproj" />

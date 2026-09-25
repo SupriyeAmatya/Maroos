@@ -1,13 +1,18 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <!-- Maroos.Tests: xUnit tests for Core rules, bUnit tests for components, and full-website HTTP tests. -->
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <!-- IsPackable false: never published as a NuGet package. -->
     <IsPackable>false</IsPackable>
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- bunit: renders Blazor components in tests. coverlet: code coverage. Mvc.Testing: WebApplicationFactory,
+     the whole site in memory. SignalR.Client: talks to the auction hub. xunit (+ runner, Test.Sdk): the test
+     framework. SkippableFact: tests that skip unless a real PostgreSQL/S3/Mailpit is configured. -->
     <PackageReference Include="bunit" Version="2.11.3" />
     <PackageReference Include="coverlet.collector" Version="6.0.4" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.0" />
@@ -19,14 +24,17 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Every test file gets "using Xunit;" automatically. -->
     <Using Include="Xunit" />
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Saved Scryfall responses, copied next to the test build so FakeScryfallHandler can read them. -->
     <None Update="Scryfall\Fixtures\*.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Tests reach both projects. -->
     <ProjectReference Include="..\Maroos.Core\Maroos.Core.csproj" />
     <ProjectReference Include="..\Maroos.Web\Maroos.Web.csproj" />
   </ItemGroup>

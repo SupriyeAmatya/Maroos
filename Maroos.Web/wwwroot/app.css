@@ -291,6 +291,122 @@ h1:focus {
     }
 }
 
+/* Deck extras: the "Copied from" credit, card pictures (Stacks and Grid views), and the sample hand. */
+.deck-credit {
+    font-size: 0.9rem;
+}
+
+/* A card tile: positioned so the ×N badge can sit on top of the image. */
+.deck-card-tile {
+    position: relative;
+    display: block;
+    border-radius: 4.75% / 3.5%;
+}
+
+.deck-card-tile img {
+    display: block;
+    width: 100%;
+    aspect-ratio: 488 / 680;
+    border-radius: 4.75% / 3.5%;
+    box-shadow: 0 1px 4px rgb(0 0 0 / 0.25);
+}
+
+/* Keyboard focus: a clear outline around the whole card. */
+a.deck-card-tile:focus-visible {
+    outline: 2px solid #258cfb;
+    outline-offset: 2px;
+}
+
+/* The ×N badge sits in the name bar, so it still shows when the card is stacked under others. */
+.deck-card-qty {
+    position: absolute;
+    top: 4%;
+    right: 5%;
+    padding: 0.05rem 0.45rem;
+    border-radius: 999px;
+    background: rgb(0 0 0 / 0.78);
+    color: #fff;
+    font-size: 0.8rem;
+    font-weight: 600;
+    line-height: 1.4;
+}
+
+/* The lists of pictures: no browser spacing. */
+.deck-picture-list {
+    margin: 0;
+}
+
+/* Stacks: one column per group. Each card after the first moves up by 120% of the card's width, which leaves
+   the top ~14% of the card above it showing (its name bar). The hovered or focused card rises above the rest. */
+.deck-stacks {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+    gap: 1.5rem 1rem;
+    align-items: start;
+    margin-bottom: 1.5rem;
+}
+
+.deck-stacks .deck-picture-list li {
+    position: relative;
+}
+
+/* Why -120%: a percentage margin is a percentage of the element's WIDTH. A card is about 1.39x as tall as
+   it is wide, so moving each card up by 1.2 widths leaves about 0.19 widths (14% of the height) showing. */
+.deck-stacks .deck-picture-list li + li {
+    margin-top: -120%;
+}
+
+.deck-stacks .deck-picture-list li:hover,
+.deck-stacks .deck-picture-list li:focus-within {
+    z-index: 1;
+}
+
+/* Grid: every card at full size, group by group. */
+.deck-grid .deck-picture-group {
+    margin-bottom: 1.25rem;
+}
+
+.deck-grid .deck-picture-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 0.75rem;
+}
+
+.deck-grid a.deck-card-tile img {
+    transition: transform 0.1s ease-in-out;
+}
+
+.deck-grid a.deck-card-tile:hover img {
+    transform: translateY(-3px);
+}
+
+/* The sample hand: a row of smaller cards that wraps. */
+.sample-hand-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 0.5rem;
+}
+
+@media (max-width: 640.98px) {
+    .deck-stacks {
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    }
+
+    .deck-grid .deck-picture-list {
+        grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    }
+
+    .sample-hand-cards {
+        grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .deck-grid a.deck-card-tile img {
+        transition: none;
+    }
+}
+
 /* Deck stats and legality */
 /* Chart color tokens (CSS variables) for DeckStatsPanel; the SVG uses var(--viz-...). */
 .viz-root {

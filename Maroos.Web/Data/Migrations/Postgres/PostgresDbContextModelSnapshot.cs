@@ -127,6 +127,9 @@ namespace Maroos.Web.Data.Migrations.Postgres
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("CopiedFromDeckId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -151,6 +154,8 @@ namespace Maroos.Web.Data.Migrations.Postgres
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("CopiedFromDeckId");
 
                     b.HasIndex("OwnerId", "UpdatedAt");
 
@@ -565,6 +570,11 @@ namespace Maroos.Web.Data.Migrations.Postgres
 
             modelBuilder.Entity("Maroos.Core.Decks.Deck", b =>
                 {
+                    b.HasOne("Maroos.Core.Decks.Deck", null)
+                        .WithMany()
+                        .HasForeignKey("CopiedFromDeckId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("Maroos.Web.Data.ApplicationUser", null)
                         .WithMany()
                         .HasForeignKey("OwnerId")

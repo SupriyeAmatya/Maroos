@@ -1,0 +1,55 @@
+@* =====================================================================================================
+   FILE: Maroos.Web/Components/Decks/SampleHandPanel.razor
+   PURPOSE: The deck page's "Sample hand" panel: buttons, the "Hand: 7 · Library: 53" line, and the cards.
+   LIFETIME: the page only renders this while the panel is open, so each opening starts a fresh hand.
+   ===================================================================================================== *@
+@* Practice draws from the main deck: an opening hand of 7, then Draw, Mulligan or New hand. Nothing is saved;
+   closing the panel throws the hand away. The rules live in Maroos.Core/Decks/SampleHand. *@
+
+<section class="deck-panel card card-body mb-3 sample-hand" aria-label="Sample hand">
+    @* No main-deck cards (e.g. only a sideboard): explain instead of showing buttons. *@
+    @if (hand.DeckSize == 0)
+    {
+        <p class="mb-0 text-muted">Add cards to the main deck to draw a sample hand.</p>
+    }
+    else
+    {
+        <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+            <button type="button" class="btn btn-outline-secondary" @onclick="hand.NewHand">New hand</button>
+            <button type="button" class="btn btn-outline-secondary" @onclick="hand.Mulligan">Mulligan</button>
+            @* Draw is disabled once the library is empty. *@
+            <button type="button" class="btn btn-primary" disabled="@(hand.LibraryCount == 0)" @onclick="Draw">Draw</button>
+            @* role="status": screen readers announce the new counts after each button press. *@
+            <p class="sample-hand-status text-muted mb-0 ms-sm-2" role="status">
+                Hand: @hand.Hand.Count · Library: @hand.LibraryCount
+                @if (hand.Mulligans > 0)
+                {
+                    <span> · Mulligan @hand.Mulligans: put @hand.Mulligans card@(hand.Mulligans == 1 ? "" : "s") on the bottom.</span>
+                }
+            </p>
+        </div>
+        <ul class="list-unstyled sample-hand-cards mb-0">
+            @foreach (var card in hand.Hand)
+            {
+                <li><DeckCardTile Entry="card" Linked="false" /></li>
+            }
+        </ul>
+    }
+</section>
+
+@code {
+    // Entries: the whole deck; SampleHand keeps just the main board.
+    [Parameter, EditorRequired] public IReadOnlyList<DeckEntry> Entries { get; set; } = [];
+
+    private SampleHand hand = default!;
+
+    // OnInitialized: runs once when the panel opens: a new shuffle and an opening hand.
+    // Random.Shared: .NET's thread-safe shared random generator (the Core tests use a seeded one instead).
+    protected override void OnInitialized()
+    {
+        hand = new SampleHand(Entries, Random.Shared);
+        hand.NewHand();
+    }
+
+    private void Draw() => hand.Draw();
+}

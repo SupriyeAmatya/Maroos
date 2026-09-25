@@ -106,9 +106,8 @@ public class IdentityLoginTests : IClassFixture<MaroosWebFactory>, IAsyncLifetim
         Assert.True(result.Succeeded);
     }
 
-    // TEST: a wrong password fails.
-    [Fact]
     // TEST: an account that hasn't confirmed its email is refused (IsNotAllowed), even with the right password.
+    [Fact]
     public async Task Unconfirmed_user_cannot_log_in_until_they_confirm_their_email()
     {
         var (users, signIn, scope) = Managers();
@@ -120,6 +119,7 @@ public class IdentityLoginTests : IClassFixture<MaroosWebFactory>, IAsyncLifetim
         Assert.True(result.IsNotAllowed);
     }
 
+    // TEST: a wrong password fails.
     [Fact]
     public async Task Wrong_password_is_rejected()
     {

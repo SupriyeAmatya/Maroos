@@ -122,6 +122,9 @@ namespace Maroos.Web.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid?>("CopiedFromDeckId")
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("TEXT");
 
@@ -146,6 +149,8 @@ namespace Maroos.Web.Migrations
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("CopiedFromDeckId");
 
                     b.HasIndex("OwnerId", "UpdatedAt");
 
@@ -554,6 +559,11 @@ namespace Maroos.Web.Migrations
 
             modelBuilder.Entity("Maroos.Core.Decks.Deck", b =>
                 {
+                    b.HasOne("Maroos.Core.Decks.Deck", null)
+                        .WithMany()
+                        .HasForeignKey("CopiedFromDeckId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("Maroos.Web.Data.ApplicationUser", null)
                         .WithMany()
                         .HasForeignKey("OwnerId")

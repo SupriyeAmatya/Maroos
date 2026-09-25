@@ -56,6 +56,10 @@ Each phase ends with a working site and a commit.
 - Pages: `/decks` (mine, `[Authorize]`), `/decks/new` (`[Authorize]`), `/decks/{id}` (interactive; owner edits, anyone views if public).
 - `Maroos.Web/Components/Cards/CardAutocomplete` is the shared card-name box (search page, deck "add card").
 - `DeckStats` (curve 0–6/7+ of non-land main + commander cards, colors, types, total price) and `DeckRules` (legality, size, copies, restricted, commander, commander color identity) live in `Maroos.Core/Decks`; `DeckView.Stats` / `DeckView.Issues` compute them. `DeckRules.RulesFor(format)` holds the per-format size and copy limits.
+- Deck extras (design: `docs/deck-extras-design.md`):
+  - Views: `/decks/{id}?view=list|stacks|grid`, parsed by `DeckViewModes.Parse` (unknown → List). Every view groups cards with `DeckGroups.For` (Core). Stacks and Grid are `Components/Decks/DeckPictures` built from `DeckCardTile`s. Editing (−/+) is list-only.
+  - Sample hand: `SampleHand` (Core) deals from the main board only; pass a seeded `Random` in tests. `SampleHandPanel` shows it and saves nothing.
+  - Copy: `DeckService.CopyAsync` makes a private "Copy of …" for any signed-in user who can see the deck (owners get "Duplicate"). It throws `DeckNotFoundException` for decks the caller can't see. `Deck.CopiedFromDeckId` has a foreign key with `ON DELETE SET NULL`. `DeckView.CopiedFrom` is the credit (original + owner's public name), shown only while the original is visible to the viewer. `?copied=1` is read as a string (a bool query parameter throws on other values), shown once, then removed from the URL.
 - Charts: `Maroos.Web/Components/Decks/DeckStatsPanel` is a hand-drawn SVG; colors are `--viz-*` tokens on `.viz-root` in `app.css`. Format SVG numbers with invariant culture. The site is light-only; dark chart tokens apply under `[data-bs-theme="dark"]`, not the OS setting.
 - If `dotnet watch` has the Debug build locked, build/test/migrate with `-c Release` / `--configuration Release`.
 

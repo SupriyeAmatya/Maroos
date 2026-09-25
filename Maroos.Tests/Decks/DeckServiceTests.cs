@@ -1,7 +1,8 @@
 // =====================================================================================================
 // FILE: Maroos.Tests/Decks/DeckServiceTests.cs
 // PURPOSE: DeckService: create/list/get, owner-only changes (DeckAccessException), add card, quantities,
-//   import (batched lookups, name fallback, replace keeps rows), delete removes watches.
+//   import (batched lookups, name fallback, replace keeps rows), delete removes watches, and copying
+//   (a private "Copy of …" with credit that disappears when the original goes private or is deleted).
 // Each test's name says what it proves; the '// TEST:' line above each one repeats it in plain words.
 // =====================================================================================================
 
@@ -36,17 +37,17 @@ public sealed class DeckServiceTests : IDisposable
         var clock = new ManualClock(new DateTimeOffset(2026, 9, 23, 12, 0, 0, TimeSpan.Zero));
         var cards = new CardService(_scryfall.CreateClient(), _db, new MemoryCache(new MemoryCacheOptions()), clock);
         _decks = new DeckService(_db, cards, clock);
-        _alice = AddUser("alice@example.com");
+        _alice = AddUser("alice@example.com", "Alice the Brewer");
         _bob = AddUser("bob@example.com");
     }
 
     public void Dispose() => _db.Dispose();
 
-    // Helper: Add user.
-    private string AddUser(string email)
+    // Helper: Add user (optionally with a display name, which the copy credit shows).
+    private string AddUser(string email, string? displayName = null)
     {
         using var db = _db.CreateDbContext();
-        var user = new ApplicationUser { UserName = email, Email = email };
+        var user = new ApplicationUser { UserName = email, Email = email, DisplayName = displayName };
         db.Users.Add(user);
         db.SaveChanges();
         return user.Id;
@@ -274,5 +275,86 @@ public sealed class DeckServiceTests : IDisposable
         Assert.Null(await _decks.GetAsync(deckId, _alice));
         using var db = _db.CreateDbContext();
         Assert.Empty(db.DeckCards);
+    }
+
+    // TEST: Copying a public deck gives a private copy with the same cards and credit.
+    [Fact]
+    public async Task Copying_a_public_deck_gives_a_private_copy_with_the_same_cards_and_credit()
+    {
+        var sourceId = await NewDeckAsync(_alice, isPublic: true);
+        await _decks.ImportAsync(sourceId, _alice, SixtyCardList, replace: false);
+
+        var copyId = await _decks.CopyAsync(sourceId, _bob);
+
+        var copy = (await _decks.GetAsync(copyId, _bob))!;
+        var source = (await _decks.GetAsync(sourceId, _bob))!;
+        Assert.True(copy.IsOwner);
+        Assert.Equal("Copy of Burn", copy.Deck.Name);
+        Assert.Equal("modern", copy.Deck.Format);
+        Assert.False(copy.Deck.IsPublic);
+        Assert.Equal(sourceId, copy.Deck.CopiedFromDeckId);
+        Assert.Equal(source.Export(includePrintings: true), copy.Export(includePrintings: true));
+        Assert.Equal(new DeckCopySource(sourceId, "Burn", "Alice the Brewer"), copy.CopiedFrom);
+
+        // The original is untouched and isn't a copy of anything.
+        Assert.Null(source.CopiedFrom);
+        Assert.Equal(63, source.Count(Board.Main) + source.Count(Board.Side));
+    }
+
+    // TEST: A copy of a long name stays within the limit.
+    [Fact]
+    public async Task A_copy_of_a_long_name_stays_within_the_limit()
+    {
+        var sourceId = (await _decks.CreateAsync(_alice, new string('x', Deck.MaxNameLength), "modern", isPublic: true)).Id;
+
+        var copy = (await _decks.GetAsync(await _decks.CopyAsync(sourceId, _bob), _bob))!;
+
+        Assert.Equal(Deck.MaxNameLength, copy.Deck.Name.Length);
+        Assert.StartsWith("Copy of x", copy.Deck.Name);
+    }
+
+    // TEST: Someone elses private deck cannot be copied.
+    // A made-up id fails the same way, and a signed-out caller (empty user id) is refused outright.
+    [Fact]
+    public async Task Someone_elses_private_deck_cannot_be_copied()
+    {
+        var sourceId = await NewDeckAsync(_alice, isPublic: false);
+
+        await Assert.ThrowsAsync<DeckNotFoundException>(() => _decks.CopyAsync(sourceId, _bob));
+        await Assert.ThrowsAsync<DeckNotFoundException>(() => _decks.CopyAsync(Guid.NewGuid(), _bob));
+        await Assert.ThrowsAsync<DeckAccessException>(() => _decks.CopyAsync(sourceId, ""));
+    }
+
+    // TEST: Owners can duplicate their own private decks.
+    [Fact]
+    public async Task Owners_can_duplicate_their_own_private_decks()
+    {
+        var sourceId = await NewDeckAsync(_alice, isPublic: false);
+        await _decks.ImportAsync(sourceId, _alice, "4 Lightning Bolt", replace: false);
+
+        var copy = (await _decks.GetAsync(await _decks.CopyAsync(sourceId, _alice), _alice))!;
+
+        Assert.Equal(4, copy.Count(Board.Main));
+        // Alice can see her own private original, so the credit shows for her.
+        Assert.Equal(sourceId, copy.CopiedFrom?.DeckId);
+    }
+
+    // TEST: The credit disappears when the original goes private or is deleted.
+    // The copy survives the original's deletion: the database sets CopiedFromDeckId to null (ON DELETE SET NULL).
+    [Fact]
+    public async Task The_credit_disappears_when_the_original_goes_private_or_is_deleted()
+    {
+        var sourceId = await NewDeckAsync(_alice, isPublic: true);
+        var copyId = await _decks.CopyAsync(sourceId, _bob);
+
+        await _decks.UpdateSettingsAsync(sourceId, _alice, "Burn", "modern", isPublic: false);
+        var afterPrivate = (await _decks.GetAsync(copyId, _bob))!;
+        Assert.Null(afterPrivate.CopiedFrom);
+        Assert.Equal(sourceId, afterPrivate.Deck.CopiedFromDeckId);
+
+        await _decks.DeleteAsync(sourceId, _alice);
+        var afterDelete = (await _decks.GetAsync(copyId, _bob))!;
+        Assert.Null(afterDelete.CopiedFrom);
+        Assert.Null(afterDelete.Deck.CopiedFromDeckId);
     }
 }
