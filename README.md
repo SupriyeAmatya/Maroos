@@ -1,6 +1,6 @@
 # Maroos Bazaar
  
-Maroos is a website for Magic: The Gathering and other TCG games. You can search every card, build decks and check them against your format, and buy and sell single cards in live auctions.
+Maroos Bazaar is a project for Magic: The Gathering and other TCG games. You can search every card, build decks and check them against your format, and buy and sell single cards in live auctions.
 
 Card data and images come from [Scryfall](https://scryfall.com)'s free public API.
 
