@@ -1,3 +1,13 @@
+@* =====================================================================================================
+   FILE: Maroos.Web/Components/Pages/Profile.razor      URL: /profile?tab=decks|listings|bids|watchlist
+   PURPOSE: The signed-in user's own hub, with four tabs:
+     decks     — their decks (with format, card count, public/private)
+     listings  — auctions they've listed (status, price, bids, time left or who won)
+     bids      — auctions they've bid on (Winning / Outbid / Won / Lost / Cancelled)
+     watchlist — watched auctions and decks
+   Tabs are plain links (?tab=...), so each tab is its own URL. Only the open tab's data is loaded.
+   SECURITY: [Authorize]; everything is loaded for the signed-in user's own id.
+   ===================================================================================================== *@
 @page "/profile"
 
 @using Maroos.Web.Data
@@ -6,6 +16,7 @@
 
 @attribute [Authorize]
 
+@* UserManager: Identity's service for reading user accounts (here: the display name). *@
 @inject UserManager<ApplicationUser> Users
 @inject DeckService DeckService
 @inject AuctionService AuctionService
@@ -15,14 +26,17 @@
 
 <PageTitle>Profile · Maroos</PageTitle>
 
+@* Header: display name (what others see) and a link to account settings. *@
 <div class="d-flex flex-wrap align-items-baseline justify-content-between gap-2 mb-1">
     <h1 class="mb-0">@displayName</h1>
     <a href="Account/Manage" class="small">Account settings</a>
 </div>
+@* The login name (email) is shown only to the user themselves, here. *@
 <AuthorizeView>
     <p class="text-muted">Signed in as @context.User.Identity?.Name. Other players see you as “@displayName”.</p>
 </AuthorizeView>
 
+@* Tab links; aria-current marks the open tab for screen readers. *@
 <ul class="nav nav-tabs mb-3" role="tablist">
     @foreach (var (key, label) in Tabs)
     {
@@ -34,6 +48,7 @@
 
 @switch (tab)
 {
+    @* ---- My listings ---- *@
     case "listings":
         @if (listings.Count == 0)
         {
@@ -60,6 +75,7 @@
                                 <td><span class="badge @(listing.IsOpen ? "text-bg-success" : "text-bg-secondary")">@ListingStatus(listing)</span></td>
                                 <td class="text-end">@Money.FormatUsd(listing.CurrentCents)</td>
                                 <td class="text-end">@listing.BidCount</td>
+                                @* Open: time left. Sold: the winner's public name. Otherwise: a dash. *@
                                 <td>
                                     @if (listing.IsOpen)
                                     {
@@ -82,6 +98,7 @@
         }
         break;
 
+    @* ---- My bids ---- *@
     case "bids":
         @if (bids.Count == 0)
         {
@@ -117,6 +134,7 @@
         }
         break;
 
+    @* ---- Watchlist: auctions first, then decks ---- *@
     case "watchlist":
         @if (watchlist.Decks.Count == 0 && watchlist.Auctions.Count == 0)
         {
@@ -156,6 +174,7 @@
         }
         break;
 
+    @* ---- My decks (the default tab) ---- *@
     default:
         @if (decks.Count == 0)
         {
@@ -179,6 +198,7 @@
 }
 
 @code {
+    // Tabs: URL key -> label.
     private static readonly (string Key, string Label)[] Tabs =
     [
         ("decks", "My decks"),
@@ -189,12 +209,15 @@
 
     [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
 
+    // ?tab= from the URL.
     [SupplyParameterFromQuery(Name = "tab")] public string? TabParam { get; set; }
 
+    // The open tab, the user's public name, and the current time (for "time left").
     private string tab = "decks";
     private string displayName = ApplicationUser.FallbackDisplayName;
     private DateTime now;
 
+    // Data for each tab (only the open one gets filled).
     private IReadOnlyList<DeckSummary> decks = [];
     private IReadOnlyList<SellerListing> listings = [];
     private IReadOnlyList<MyBid> bids = [];
@@ -206,6 +229,7 @@
         var userId = principal.GetUserId()!;
         displayName = ApplicationUser.PublicName((await Users.GetUserAsync(principal))?.DisplayName);
         now = Clock.GetUtcNow().UtcDateTime;
+        // Unknown ?tab= values fall back to "decks".
         tab = Tabs.Any(t => t.Key == TabParam) ? TabParam! : "decks";
 
         // Only load what the open tab shows.
@@ -218,6 +242,7 @@
         }
     }
 
+    // ListingStatus: the badge text on the Listings tab.
     private static string ListingStatus(SellerListing listing) => listing.Status switch
     {
         AuctionStatus.Cancelled => "Cancelled",
@@ -226,6 +251,7 @@
         _ => "Ended, no bids",
     };
 
+    // BidLabel / BidBadge: text and color of the "Where you stand" badge (green good, yellow outbid, grey done).
     private static string BidLabel(MyBidState state) => state switch
     {
         MyBidState.Winning => "Winning",

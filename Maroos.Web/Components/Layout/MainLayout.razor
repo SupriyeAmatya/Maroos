@@ -1,13 +1,24 @@
+@* =====================================================================================================
+   FILE: Maroos.Web/Components/Layout/MainLayout.razor
+   PURPOSE: The frame around every page: the sticky top navigation bar (NavMenu), the page itself (@Body),
+   and the footer. Pages use the full width (there's no sidebar).
+   The footer's two notices are REQUIRED — keep them:
+     * credit to Scryfall for card data and images (and that prices may be out of date);
+     * Wizards of the Coast's Fan Content Policy notice (Maroos is unofficial fan content).
+   ===================================================================================================== *@
 @inherits LayoutComponentBase
 
 <div class="page">
+    @* The sticky top navigation bar (NavMenu.razor). *@
     <NavMenu />
 
     <main>
+        @* The current page renders here. *@
         <article class="content px-4">
             @Body
         </article>
 
+        @* Legal footer (added in phase 7). *@
         <footer class="site-footer px-4">
             <p class="mb-1">
                 Card data and images from <a href="https://scryfall.com" target="_blank" rel="noopener">Scryfall</a>.
@@ -22,6 +33,7 @@
     </main>
 </div>
 
+@* Blazor shows this bar if an unhandled error happens in an interactive page. *@
 <div id="blazor-error-ui" data-nosnippet>
     An unhandled error has occurred.
     <a href="." class="reload">Reload</a>

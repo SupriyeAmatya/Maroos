@@ -1,3 +1,10 @@
+// =====================================================================================================
+// FILE: Maroos.Tests/Scryfall/CardDisplayTests.cs
+// PURPOSE: Card display helpers: ManaSymbols tokenizing {2}{R} and symbol URLs, format display names and
+//   legality labels.
+// Each test's name says what it proves; the '// TEST:' line above each one repeats it in plain words.
+// =====================================================================================================
+
 using Maroos.Core;
 using Maroos.Core.Scryfall;
 
@@ -5,6 +12,7 @@ namespace Maroos.Tests.Scryfall;
 
 public class CardDisplayTests
 {
+    // TEST: ToCents parses scryfall price strings.
     [Theory]
     [InlineData("0.72", 72L)]
     [InlineData("3.86", 386L)]
@@ -16,6 +24,7 @@ public class CardDisplayTests
     public void ToCents_parses_scryfall_price_strings(string? price, long? cents) =>
         Assert.Equal(cents, ScryfallPrices.ToCents(price));
 
+    // TEST: FormatUsd formats cents.
     [Theory]
     [InlineData(72L, "$0.72")]
     [InlineData(123450L, "$1,234.50")]
@@ -24,6 +33,7 @@ public class CardDisplayTests
     public void FormatUsd_formats_cents(long? cents, string expected) =>
         Assert.Equal(expected, Money.FormatUsd(cents));
 
+    // TEST: Tokenize splits symbols from text.
     [Fact]
     public void Tokenize_splits_symbols_from_text()
     {
@@ -34,9 +44,11 @@ public class CardDisplayTests
             tokens);
     }
 
+    // TEST: Tokenize handles empty text.
     [Fact]
     public void Tokenize_handles_empty_text() => Assert.Empty(ManaSymbols.Tokenize(null));
 
+    // TEST: SvgUrl points at scryfall symbol files.
     [Theory]
     [InlineData("R", "R.svg")]
     [InlineData("W/U", "WU.svg")]
@@ -44,6 +56,7 @@ public class CardDisplayTests
     public void SvgUrl_points_at_scryfall_symbol_files(string symbol, string file) =>
         Assert.Equal($"https://svgs.scryfall.io/card-symbols/{file}", ManaSymbols.SvgUrl(symbol));
 
+    // TEST: DisplayName names formats.
     [Theory]
     [InlineData("paupercommander", "Pauper Commander")]
     [InlineData("modern", "Modern")]
@@ -52,6 +65,7 @@ public class CardDisplayTests
     [InlineData("tlr", "TLR")]
     public void DisplayName_names_formats(string key, string name) => Assert.Equal(name, Formats.DisplayName(key));
 
+    // TEST: LegalityLabel names legalities.
     [Theory]
     [InlineData("legal", "Legal")]
     [InlineData("not_legal", "Not legal")]

@@ -1,3 +1,10 @@
+// =====================================================================================================
+// FILE: Maroos.Tests/Scryfall/CardServiceTests.cs
+// PURPOSE: CardService caching: a card is fetched once and then read from the database for 24 hours; stale
+//   cards refresh; batch lookups only fetch what's missing.
+// Each test's name says what it proves; the '// TEST:' line above each one repeats it in plain words.
+// =====================================================================================================
+
 using Maroos.Core.Scryfall;
 using Maroos.Web.Services;
 using Microsoft.Extensions.Caching.Memory;
@@ -18,6 +25,7 @@ public sealed class CardServiceTests : IDisposable
 
     private int CardRequests => _handler.Requests.Count(r => r.PathAndQuery.StartsWith("/cards/") && Guid.TryParse(r.PathAndQuery[7..], out _));
 
+    // TEST: GetCardAsync fetches once then serves from the database.
     [Fact]
     public async Task GetCardAsync_fetches_once_then_serves_from_the_database()
     {
@@ -34,6 +42,7 @@ public sealed class CardServiceTests : IDisposable
         Assert.Equal(_clock.Now, cached.FetchedAt);
     }
 
+    // TEST: GetCardAsync refetches after 24 hours.
     [Fact]
     public async Task GetCardAsync_refetches_after_24_hours()
     {
@@ -51,6 +60,7 @@ public sealed class CardServiceTests : IDisposable
         Assert.Equal(_clock.Now, Assert.Single(db.CachedCards).FetchedAt);
     }
 
+    // TEST: GetCardAsync returns null and caches nothing for unknown cards.
     [Fact]
     public async Task GetCardAsync_returns_null_and_caches_nothing_for_unknown_cards()
     {
@@ -60,6 +70,7 @@ public sealed class CardServiceTests : IDisposable
         Assert.Empty(db.CachedCards);
     }
 
+    // TEST: SearchAsync and AutocompleteAsync reuse recent results.
     [Fact]
     public async Task SearchAsync_and_AutocompleteAsync_reuse_recent_results()
     {

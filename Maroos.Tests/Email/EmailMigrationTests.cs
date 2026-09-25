@@ -1,3 +1,10 @@
+// =====================================================================================================
+// FILE: Maroos.Tests/Email/EmailMigrationTests.cs
+// PURPOSE: Turning email confirmation on must not lock out old accounts: an account created
+// before the Email migration is confirmed and gets auction emails switched on (SQLite, and PostgreSQL when
+// MAROOS_TEST_POSTGRES is set).
+// =====================================================================================================
+
 using Maroos.Tests.Auth;
 using Maroos.Tests.Deploy;
 using Maroos.Web.Data;
@@ -24,12 +31,14 @@ public sealed class EmailMigrationTests : IDisposable
         File.Delete(_path);
     }
 
+    // OldUserSql: inserts an unconfirmed account the way the old schema stored it ({0} = false, {1} = true).
     private const string OldUserSql = """
         INSERT INTO "AspNetUsers" ("Id", "UserName", "NormalizedUserName", "Email", "NormalizedEmail", "EmailConfirmed",
             "PhoneNumberConfirmed", "TwoFactorEnabled", "LockoutEnabled", "AccessFailedCount")
         VALUES ('old-user', 'old@example.com', 'OLD@EXAMPLE.COM', 'old@example.com', 'OLD@EXAMPLE.COM', {0}, {0}, {0}, {1}, 0)
         """;
 
+    // TEST: Accounts from before email are confirmed and get auction emails on sqlite.
     [Fact]
     public async Task Accounts_from_before_email_are_confirmed_and_get_auction_emails_on_sqlite()
     {
@@ -49,6 +58,7 @@ public sealed class EmailMigrationTests : IDisposable
         Assert.True(user.AuctionEmails);
     }
 
+    // TEST: Accounts from before email are confirmed and get auction emails on postgres.
     [SkippableFact]
     public async Task Accounts_from_before_email_are_confirmed_and_get_auction_emails_on_postgres()
     {

@@ -1,3 +1,11 @@
+@* =====================================================================================================
+   FILE: Maroos.Web/Components/Pages/Card.razor      URL: /card/{scryfall id}
+   PURPOSE: One card: image(s), name + mana cost, type line, rules text, set, prices, and legality in every
+   format. Double-faced cards (e.g. werewolves) show both faces.
+   DATA: CardService.GetCardAsync — from the CachedCards table when fresh (24 h), otherwise from Scryfall.
+   RENDERING: static server-side rendering (nothing on this page is interactive).
+   ===================================================================================================== *@
+@* {Id:guid} = a route constraint: only GUIDs match, so /card/abc is a 404. *@
 @page "/card/{Id:guid}"
 
 @inject CardService Cards
@@ -13,6 +21,7 @@ else
 <PageTitle>@card.Name · Maroos</PageTitle>
 
 <div class="card-detail">
+    @* Left: the image(s). *@
     <div class="card-detail-images">
         @foreach (var image in Images)
         {
@@ -20,12 +29,14 @@ else
         }
     </div>
 
+    @* Right: text details, one section per face. *@
     <div class="card-detail-info">
         @foreach (var face in Faces)
         {
             <section class="card-face">
                 <h1 class="h3 d-flex flex-wrap align-items-center gap-2">
                     <span>@face.Name</span>
+                    @* Mana cost as symbols (lands have none). *@
                     @if (!string.IsNullOrEmpty(face.ManaCost))
                     {
                         <span class="fs-5"><ManaText Text="@face.ManaCost" /></span>
@@ -39,8 +50,10 @@ else
             </section>
         }
 
+        @* Printing: "Double Masters 2022 (2X2) #117". *@
         <p class="text-muted small">@card.SetName (@card.Set.ToUpperInvariant()) #@card.CollectorNumber</p>
 
+        @* Prices (cents -> "$1.23"; missing prices show "—"). *@
         <h2 class="h5 mt-4">Price</h2>
         <dl class="row mb-0">
             <dt class="col-4">USD</dt>
@@ -50,6 +63,7 @@ else
         </dl>
         <p class="small text-muted">Prices from Scryfall, updated daily.</p>
 
+        @* Legality table, sorted by format name; the badge color comes from the legality-* CSS classes. *@
         <h2 class="h5 mt-4">Format legality</h2>
         <table class="table table-sm legality-table">
             <tbody>
@@ -69,10 +83,13 @@ else
 }
 
 @code {
+    // Id: from the URL.
     [Parameter] public Guid Id { get; set; }
 
+    // card: the loaded card, or null when Scryfall doesn't know the id.
     private ScryfallCard? card;
 
+    // Load the card whenever the id changes.
     protected override async Task OnParametersSetAsync() => card = await Cards.GetCardAsync(Id);
 
     /// <summary>Double-faced cards show every face; single-faced cards show the card itself.</summary>
@@ -81,6 +98,8 @@ else
             ? faces
             : [new ScryfallCardFace(card.Name, card.ManaCost, card.TypeLine, card.OracleText, card.ImageUris)];
 
+    // Images: one image for normal cards (and split/adventure cards that share one image);
+    // one per face for true double-faced cards.
     private IEnumerable<(string Url, string Name)> Images =>
         card!.ImageUris?.Normal is { } single
             ? [(single, card.Name)]

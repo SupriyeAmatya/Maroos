@@ -1,3 +1,11 @@
+// =====================================================================================================
+// FILE: Maroos.Tests/Auctions/AuctionPhotoStoreTests.cs
+// PURPOSE: AuctionPhotoStore: PNG -> JPEG, shrink to 1600 px, EXIF/GPS removed, phone orientation fixed
+//   (pixel-checked for all 8 EXIF values), broken or >5 MB files rejected, only generated keys
+//   readable/deletable.
+// Each test's name says what it proves; the '// TEST:' line above each one repeats it in plain words.
+// =====================================================================================================
+
 using System.Text;
 using Maroos.Web.Services;
 using SkiaSharp;
@@ -17,6 +25,7 @@ public sealed class AuctionPhotoStoreTests : IDisposable
             Directory.Delete(_root, recursive: true);
     }
 
+    // Helper: Image.
     public static byte[] Image(int width, int height, SKEncodedImageFormat format, SKColor? color = null)
     {
         using var bitmap = new SKBitmap(width, height);
@@ -26,8 +35,10 @@ public sealed class AuctionPhotoStoreTests : IDisposable
         return data.ToArray();
     }
 
+    // Helper: File for.
     private string FileFor(string path) => Path.Combine(_root, path["uploads/".Length..]);
 
+    // TEST: Saves a png as a jpeg and returns its url.
     [Fact]
     public async Task Saves_a_png_as_a_jpeg_and_returns_its_url()
     {
@@ -40,6 +51,7 @@ public sealed class AuctionPhotoStoreTests : IDisposable
         Assert.Equal((40, 30), (bitmap.Width, bitmap.Height));
     }
 
+    // TEST: Shrinks large photos to 1600 pixels on the long side.
     [Fact]
     public async Task Shrinks_large_photos_to_1600_pixels_on_the_long_side()
     {
@@ -49,6 +61,7 @@ public sealed class AuctionPhotoStoreTests : IDisposable
         Assert.Equal((1600, 1000), (bitmap.Width, bitmap.Height));
     }
 
+    // TEST: Removes exif metadata such as gps location.
     [Fact]
     public async Task Removes_exif_metadata_such_as_gps_location()
     {
@@ -65,6 +78,7 @@ public sealed class AuctionPhotoStoreTests : IDisposable
         Assert.DoesNotContain("Exif", saved);
     }
 
+    // TEST: Turns a sideways phone photo upright.
     [Fact]
     public async Task Turns_a_sideways_phone_photo_upright()
     {
@@ -86,6 +100,7 @@ public sealed class AuctionPhotoStoreTests : IDisposable
         Assert.Equal((20, 40), (bitmap.Width, bitmap.Height));
     }
 
+    // TEST: Rejects files that are not jpeg or png.
     [Theory]
     [InlineData("GIF89a not allowed")]
     [InlineData("<svg xmlns='http://www.w3.org/2000/svg'/>")]
@@ -98,6 +113,7 @@ public sealed class AuctionPhotoStoreTests : IDisposable
         Assert.False(Directory.Exists(_root) && Directory.EnumerateFiles(_root).Any());
     }
 
+    // TEST: Rejects a file with a jpeg header but broken image data.
     [Fact]
     public async Task Rejects_a_file_with_a_jpeg_header_but_broken_image_data()
     {
@@ -106,6 +122,7 @@ public sealed class AuctionPhotoStoreTests : IDisposable
         await Assert.ThrowsAsync<PhotoRejectedException>(() => _store.SaveAsync(new MemoryStream(fake)));
     }
 
+    // TEST: Rejects uploads over 5 mb.
     [Fact]
     public async Task Rejects_uploads_over_5_mb()
     {
@@ -116,6 +133,7 @@ public sealed class AuctionPhotoStoreTests : IDisposable
         Assert.Equal("Photos can be up to 5 MB.", error.Message);
     }
 
+    // TEST: Delete removes saved photos but ignores other paths.
     [Fact]
     public async Task Delete_removes_saved_photos_but_ignores_other_paths()
     {
@@ -135,6 +153,7 @@ public sealed class AuctionPhotoStoreTests : IDisposable
         Assert.False(File.Exists(FileFor(path)));
     }
 
+    // TEST: Open only serves keys it generated.
     [Theory]
     [InlineData("../secret.jpg")]
     [InlineData("..%2Fsecret.jpg")]
@@ -146,6 +165,7 @@ public sealed class AuctionPhotoStoreTests : IDisposable
         Assert.Null(await _store.OpenAsync(key));
     }
 
+    // TEST: Open returns a saved photo.
     [Fact]
     public async Task Open_returns_a_saved_photo()
     {
@@ -156,6 +176,7 @@ public sealed class AuctionPhotoStoreTests : IDisposable
         Assert.Equal(0xFF, photo!.ReadByte());
     }
 
+    // TEST: OrientationMatrix turns stored pixels upright.
     [Theory]
     [InlineData(SKEncodedOrigin.TopLeft, 0, 0, 0, 0)]
     [InlineData(SKEncodedOrigin.RightTop, 0, 0, 20, 0)]      // rotate 90° clockwise: top-left goes to top-right
@@ -172,6 +193,7 @@ public sealed class AuctionPhotoStoreTests : IDisposable
         Assert.Equal(expectedY, point.Y, precision: 3);
     }
 
+    // TEST: OrientedSize swaps width and height for quarter turns.
     [Fact]
     public void OrientedSize_swaps_width_and_height_for_quarter_turns()
     {

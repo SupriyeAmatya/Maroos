@@ -1,8 +1,16 @@
+/* =====================================================================================================
+   FILE: Maroos.Web/wwwroot/app.css
+   PURPOSE: The site-wide stylesheet (on top of Bootstrap 5). Sections: template basics, Cards, Decks,
+   Deck stats and legality, Auctions, Bidding, Footer, Home. Layouts use CSS grid/flex and adapt to
+   phone widths. The site is light-only; chart colors are variables so a dark theme could swap them.
+   The top navigation bar has its own styles in Components/Layout/NavMenu.razor.css.
+   ===================================================================================================== */
 /* Height of the sticky top navigation bar (NavMenu); sticky page elements sit below it. */
 :root {
     --site-nav-height: 3.5rem;
 }
 
+/* Lines up to the "Cards" section come from the Blazor template (fonts, focus outlines, validation colors, error boundary). */
 html, body {
     font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
 }
@@ -64,6 +72,7 @@ h1:focus {
     text-align: start;
 }
 /* Cards */
+/* Mana/tap symbol icons (ManaText.razor): sized to the text around them. */
 .mana-symbol {
     width: 1.05em;
     height: 1.05em;
@@ -71,6 +80,7 @@ h1:focus {
     margin: 0 0.05em;
 }
 
+/* Search results: a responsive grid of card images (as many columns as fit). */
 .card-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
@@ -101,6 +111,7 @@ h1:focus {
     color: #212529;
 }
 
+/* Card page (/card/{id}): image column + details column. */
 .card-detail {
     display: grid;
     grid-template-columns: minmax(0, 340px) minmax(0, 1fr);
@@ -130,6 +141,7 @@ h1:focus {
     line-height: 1.5;
 }
 
+/* Legality badges on the card page; the legality-* classes color them (legal green, banned red...). */
 .legality-table {
     max-width: 380px;
 }
@@ -139,6 +151,7 @@ h1:focus {
 .legality-banned { background-color: #dc3545; }
 .legality-restricted { background-color: #0d6efd; }
 
+/* Phones: stack the card page's image above its details. */
 @media (max-width: 640.98px) {
     .card-detail {
         grid-template-columns: 1fr;
@@ -161,6 +174,7 @@ h1:focus {
     position: relative;
 }
 
+/* CardAutocomplete's suggestion list, floating under the text box. */
 .card-suggestions {
     position: absolute;
     z-index: 1000;
@@ -185,6 +199,7 @@ h1:focus {
     flex: 0 0 9.5rem;
 }
 
+/* Deck page: card columns on the left, a sticky preview image on the right. */
 .deck-layout {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 260px;
@@ -208,6 +223,7 @@ h1:focus {
     margin-bottom: 0.25rem;
 }
 
+/* One card row in a deck list: quantity, name, (issue badge), mana cost, +/- buttons. */
 .deck-row {
     display: flex;
     align-items: center;
@@ -251,8 +267,10 @@ h1:focus {
     line-height: 1.5;
 }
 
+/* The hovered card's image; sticks to the top while scrolling. */
 .deck-preview {
     position: sticky;
+    /* Below the sticky top bar. */
     top: calc(var(--site-nav-height) + 1rem);
 }
 
@@ -262,6 +280,7 @@ h1:focus {
     box-shadow: 0 2px 8px rgb(0 0 0 / 0.3);
 }
 
+/* Narrow screens: hide the preview and use one column for the card list. */
 @media (max-width: 900px) {
     .deck-layout {
         grid-template-columns: 1fr;
@@ -273,6 +292,7 @@ h1:focus {
 }
 
 /* Deck stats and legality */
+/* Chart color tokens (CSS variables) for DeckStatsPanel; the SVG uses var(--viz-...). */
 .viz-root {
     --viz-series-1: #2a78d6;
     --viz-text-primary: #0b0b0b;
@@ -292,6 +312,7 @@ h1:focus {
     margin-top: 1.5rem;
 }
 
+/* Deck stats: the four stat cards in a grid (two columns from 720px). */
 .deck-stats-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
@@ -316,6 +337,7 @@ h1:focus {
     color: var(--viz-text-secondary, #6c757d);
 }
 
+/* Mana curve SVG: bars, axis line, labels, and hover highlight. */
 .curve-chart {
     display: block;
     width: 100%;
@@ -370,6 +392,7 @@ h1:focus {
     line-height: 1.1;
 }
 
+/* Legality problems: a red badge on the row, and the card name tinted red. */
 .deck-row-flag {
     flex: 0 0 auto;
     font-size: 0.7rem;
@@ -385,6 +408,7 @@ h1:focus {
 }
 
 /* Auctions */
+/* Auction tiles (/auctions and the home page): image, name, price, time left. */
 .auction-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
@@ -434,6 +458,7 @@ h1:focus {
     font-variant-numeric: tabular-nums;
 }
 
+/* Auction page: photos on the left, facts and bidding on the right. */
 .auction-detail {
     display: grid;
     grid-template-columns: minmax(0, 340px) minmax(0, 1fr);
@@ -457,6 +482,7 @@ h1:focus {
     max-width: 180px;
 }
 
+/* The auction's facts list (price, bids, time left, condition...) as a two-column grid. */
 .auction-facts {
     display: grid;
     grid-template-columns: max-content 1fr;
@@ -480,6 +506,7 @@ h1:focus {
     line-height: 1.1;
 }
 
+/* List-a-card page: the form plus a preview of the chosen printing. */
 .new-auction {
     display: grid;
     grid-template-columns: minmax(0, 40rem) minmax(0, 260px);
@@ -489,6 +516,7 @@ h1:focus {
 
 .new-auction-preview {
     position: sticky;
+    /* Below the sticky top bar. */
     top: calc(var(--site-nav-height) + 1rem);
 }
 
@@ -498,6 +526,7 @@ h1:focus {
     box-shadow: 0 2px 8px rgb(0 0 0 / 0.3);
 }
 
+/* Phones: stack the auction and list-a-card layouts into one column. */
 @media (max-width: 767.98px) {
     .auction-detail,
     .new-auction {
@@ -541,6 +570,7 @@ h1:focus {
 }
 
 /* Bidding */
+/* Monospaced digits so the countdown doesn't jiggle as numbers change. */
 .auction-countdown {
     font-variant-numeric: tabular-nums;
     font-weight: 600;
@@ -576,6 +606,7 @@ h1:focus {
 }
 
 /* Footer: Scryfall credit and the Wizards of the Coast Fan Content Policy notice */
+/* The legal footer: small, muted text at the bottom of every page. */
 .site-footer {
     margin-top: 3rem;
     padding-top: 1rem;
@@ -590,6 +621,7 @@ h1:focus {
 }
 
 /* Home */
+/* Home page: the big search box and the three shortcut tiles. */
 .home-hero {
     max-width: 48rem;
 }

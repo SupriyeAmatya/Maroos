@@ -1,3 +1,12 @@
+@* =====================================================================================================
+   FILE: Maroos.Web/Components/Pages/NewDeck.razor      URL: /decks/new
+   PURPOSE: The "New deck" form: name, format, public/private. On success it opens the new deck's page,
+   where cards are added or a list is pasted in.
+   HOW THE FORM WORKS: static server rendering with a real HTML form POST. [SupplyParameterFromForm] fills
+   Input from the posted fields; the DataAnnotations attributes ([Required], ...) validate it; if valid,
+   OnValidSubmit runs CreateAsync. The antiforgery token is added automatically by EditForm.
+   SECURITY: [Authorize]; DeckService re-validates the name and format too.
+   ===================================================================================================== *@
 @page "/decks/new"
 
 @using System.ComponentModel.DataAnnotations
@@ -12,6 +21,7 @@
 
 <h1>New deck</h1>
 
+@* FormName identifies this form when it posts back (needed for static-rendered forms). *@
 <EditForm Model="Input" method="post" OnValidSubmit="CreateAsync" FormName="new-deck" class="new-deck-form">
     <DataAnnotationsValidator />
     <ValidationSummary class="text-danger" role="alert" />
@@ -22,6 +32,7 @@
         <ValidationMessage For="() => Input.Name" class="text-danger" />
     </div>
 
+    @* Format dropdown: every format in DeckFormats (Standard, Pioneer, Modern, Commander...). *@
     <div class="mb-3">
         <label for="deck-format" class="form-label">Format</label>
         <InputSelect id="deck-format" @bind-Value="Input.Format" class="form-select">
@@ -42,12 +53,16 @@
 </EditForm>
 
 @code {
+    // The signed-in user.
     [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
 
+    // Input: filled from the posted form fields (or empty on first display).
     [SupplyParameterFromForm] private NewDeckModel Input { get; set; } = default!;
 
+    // `??=`: create an empty model only if the form post didn't supply one.
     protected override void OnInitialized() => Input ??= new();
 
+    // CreateAsync: runs only when validation passes. Creates the deck and goes to its page.
     private async Task CreateAsync()
     {
         var user = (await AuthState).User;
@@ -55,6 +70,7 @@
         Navigation.NavigateTo($"decks/{deck.Id}");
     }
 
+    // NewDeckModel: the form's fields and their validation rules.
     private sealed class NewDeckModel
     {
         [Required(ErrorMessage = "Give the deck a name.")]
@@ -68,6 +84,8 @@
         public bool IsPublic { get; set; }
     }
 
+    // AllowedFormatAttribute: a custom validation rule — the value must be a known format
+    // (stops a hand-crafted POST with format=anything).
     private sealed class AllowedFormatAttribute : ValidationAttribute
     {
         protected override ValidationResult? IsValid(object? value, ValidationContext context) =>

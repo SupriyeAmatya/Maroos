@@ -1,34 +1,57 @@
+@* =====================================================================================================
+   FILE: Maroos.Web/Components/Decks/DeckStatsPanel.razor
+   PURPOSE: The "Deck stats" section of a deck page: four cards —
+     1. Mana curve: a bar chart of how many non-land cards cost 0, 1, 2 ... 6, 7+ mana;
+     2. Colors: cards and mana symbols per color;
+     3. Card types: creatures, instants, lands ...;
+     4. Price: total of Scryfall's USD prices.
+   All numbers come from DeckStats (Maroos.Core/Decks/DeckStats.cs); this file only draws them.
+   The chart is hand-drawn SVG (no chart library). Colors are CSS variables (--viz-*) in app.css.
+   ACCESSIBILITY: the SVG has a title/description, and a visually hidden table repeats the numbers for
+   screen readers.
+   USAGE: <DeckStatsPanel Stats="@view.Stats" />
+   ===================================================================================================== *@
 @* Mana curve (bar chart), colors, card types and total price for a deck. *@
 
 <section class="deck-stats viz-root" aria-labelledby="deck-stats-heading">
     <h2 id="deck-stats-heading" class="h5 mb-3">Deck stats</h2>
 
     <div class="deck-stats-grid">
+        @* ---- 1. Mana curve ---- *@
         <figure class="deck-stat deck-stat-curve card card-body mb-0">
             <figcaption class="deck-stat-title" id="curve-title">Mana curve</figcaption>
+            @* Subtitle, e.g. "23 non-land cards · average mana value 2.61" (with correct plural). *@
             <p class="deck-stat-sub" id="curve-desc">
                 @Stats.NonLandCount non-land card@(Stats.NonLandCount == 1 ? "" : "s") · average mana value @Stats.AverageManaValue.ToString("0.##")
             </p>
+            @* viewBox: the chart's own coordinate system (360 x 170); CSS scales it to the page width. *@
             <svg class="curve-chart" viewBox="0 0 @N(Width) @N(Height)" role="img" aria-labelledby="curve-title curve-desc">
+                @* The horizontal axis line the bars stand on. *@
                 <line class="curve-baseline" x1="@N(PlotLeft)" x2="@N(Width - PlotLeft)" y1="@N(Baseline)" y2="@N(Baseline)" />
+                @* One column per mana value (8 columns: 0–6 and 7+). *@
                 @for (var i = 0; i < Stats.ManaCurve.Count; i++)
                 {
+                    @* count: cards at this mana value; x: the column's left edge; barHeight: scaled to the tallest bar. *@
                     var count = Stats.ManaCurve[i];
                     var x = PlotLeft + i * Slot;
                     var barHeight = BarHeight(count);
                     <g class="curve-bar" data-mana-value="@DeckStats.CurveLabels[i]" data-count="@count">
+                        @* <title> gives a tooltip on hover, e.g. "Mana value 3: 7 cards". *@
                         <title>Mana value @DeckStats.CurveLabels[i]: @count card@(count == 1 ? "" : "s")</title>
                         @* Hit target is the whole column, bigger than the bar. *@
                         <rect class="curve-hit" x="@N(x)" y="0" width="@N(Slot)" height="@N(Height)" />
+                        @* The bar itself, centred in its column (no bar for 0). *@
                         @if (count > 0)
                         {
                             <path class="curve-fill" d="@BarPath(x + (Slot - BarWidth) / 2, barHeight)" />
                         }
+                        @* Label (mana value) and count under the axis. *@
                         <text class="curve-label" x="@N(x + Slot / 2)" y="@N(Baseline + 16)">@DeckStats.CurveLabels[i]</text>
                         <text class="curve-count" x="@N(x + Slot / 2)" y="@N(Baseline + 32)">@count</text>
                     </g>
                 }
             </svg>
+            @* The same numbers as a table, only for screen readers. *@
             <table class="visually-hidden">
                 <caption>Mana curve</caption>
                 <thead><tr><th scope="col">Mana value</th><th scope="col">Cards</th></tr></thead>
@@ -41,6 +64,7 @@
             </table>
         </figure>
 
+        @* ---- 2. Colors: "Cards" = cards of that color, "Symbols" = mana symbols ("pips") in their costs. ---- *@
         <div class="deck-stat card card-body mb-0">
             <h3 class="deck-stat-title">Colors</h3>
             @if (Stats.Colors.Count == 0)
@@ -60,6 +84,7 @@
                     <tbody>
                         @foreach (var color in Stats.Colors)
                         {
+                            @* data-* attributes let tests find rows without depending on text. *@
                             <tr data-color="@color.Color">
                                 <th scope="row" class="fw-normal">
                                     <img class="mana-symbol" src="@ManaSymbols.SvgUrl(color.Color)" alt="" /> @color.Name
@@ -73,6 +98,7 @@
             }
         </div>
 
+        @* ---- 3. Card types (each card counted once, under its main type group). ---- *@
         <div class="deck-stat card card-body mb-0">
             <h3 class="deck-stat-title">Card types</h3>
             <table class="table table-sm mb-0 deck-types">
@@ -88,6 +114,7 @@
             </table>
         </div>
 
+        @* ---- 4. Price (money is long cents, formatted as $1,234.56). ---- *@
         <div class="deck-stat card card-body mb-0">
             <h3 class="deck-stat-title">Price</h3>
             <p class="deck-price mb-1">@Money.FormatUsd(Stats.TotalPriceCents)</p>
@@ -103,6 +130,9 @@
 </section>
 
 @code {
+    // Chart geometry, in SVG units:
+    //   Width x Height — the whole chart; PlotLeft — side margin; Baseline — y of the axis (labels go below it);
+    //   PlotTop — space above the tallest bar; BarWidth — bar thickness; Radius — rounded top corners.
     private const double Width = 360;
     private const double Height = 170;
     private const double PlotLeft = 8;
@@ -110,13 +140,17 @@
     private const double PlotTop = 8;
     private const double BarWidth = 28;
     private const double Radius = 4;
+    // Slot: the width of one column (8 columns across the plot).
     private static readonly double Slot = (Width - 2 * PlotLeft) / 8;
 
+    // Stats: the numbers to draw (required).
     [Parameter, EditorRequired] public DeckStats Stats { get; set; } = default!;
 
     /// <summary>SVG coordinates must use "." whatever the server's culture.</summary>
+    // (On a server set to e.g. German, 12.5 would print as "12,5" and break the SVG.)
     private static string N(double value) => value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
 
+    // BarHeight: the tallest column fills the plot height; others are proportional.
     private double BarHeight(int count)
     {
         var max = Stats.ManaCurve.Max();
@@ -124,6 +158,8 @@
     }
 
     /// <summary>A bar anchored to the baseline with only its top corners rounded.</summary>
+    // SVG path commands: M = move to, V = vertical line, H = horizontal line, Q = curve (rounded corner), Z = close.
+    // FormattableString.Invariant keeps the numbers culture-safe, like N().
     private static string BarPath(double x, double height)
     {
         var r = Math.Min(Radius, height);

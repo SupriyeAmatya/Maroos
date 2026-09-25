@@ -1,3 +1,9 @@
+@* =====================================================================================================
+   FILE: Maroos.Web/Components/Pages/Decks.razor      URL: /decks
+   PURPOSE: "My decks" — a table of the signed-in user's decks (name, format, card count, public/private,
+   last updated) and a "New deck" button.
+   SECURITY: [Authorize] — visitors are sent to the login page. Only the caller's own decks are listed.
+   ===================================================================================================== *@
 @page "/decks"
 
 @using Microsoft.AspNetCore.Authorization
@@ -19,10 +25,12 @@
 }
 else if (decks.Count == 0)
 {
+    @* Empty state: tell new users what to do. *@
     <p>You haven't built a deck yet. <a href="decks/new">Start one</a> and paste in a list or add cards one by one.</p>
 }
 else
 {
+    @* table-responsive: the table scrolls sideways on narrow phones instead of breaking the layout. *@
     <div class="table-responsive">
         <table class="table align-middle deck-table">
             <thead>
@@ -40,6 +48,7 @@ else
                     <tr>
                         <td><a href="decks/@deck.Id">@deck.Name</a></td>
                         <td>@DeckFormats.DisplayName(deck.Format)</td>
+                        @* "60 + 15" = main deck + sideboard. *@
                         <td class="text-end">
                             @deck.MainCount
                             @if (deck.SideCount > 0)
@@ -50,6 +59,7 @@ else
                         <td>
                             <span class="badge @(deck.IsPublic ? "text-bg-success" : "text-bg-secondary")">@(deck.IsPublic ? "Public" : "Private")</span>
                         </td>
+                        @* <time> with a machine-readable ISO date ("o" format) and a friendly display date. *@
                         <td><time datetime="@deck.UpdatedAt.ToString("o")">@deck.UpdatedAt.ToString("MMM d, yyyy")</time></td>
                     </tr>
                 }
@@ -59,10 +69,13 @@ else
 }
 
 @code {
+    // The signed-in user.
     [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
 
+    // decks: null while loading.
     private IReadOnlyList<DeckSummary>? decks;
 
+    // Load this user's decks. `!` — [Authorize] guarantees a signed-in user, so the id isn't null.
     protected override async Task OnInitializedAsync()
     {
         var user = (await AuthState).User;

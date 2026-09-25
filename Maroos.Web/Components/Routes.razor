@@ -1,11 +1,20 @@
-﻿@using Maroos.Web.Components.Account.Shared
+﻿@* =====================================================================================================
+   FILE: Maroos.Web/Components/Routes.razor
+   PURPOSE: The router. It looks at the URL, finds the page component with a matching @page directive,
+   checks [Authorize], and renders the page inside MainLayout.
+   ===================================================================================================== *@
+@using Maroos.Web.Components.Account.Shared
+@* Unknown URLs render Pages/NotFound.razor. *@
 <Router AppAssembly="typeof(Program).Assembly" NotFoundPage="typeof(Pages.NotFound)">
     <Found Context="routeData">
+        @* AuthorizeRouteView enforces [Authorize] on pages; the default layout wraps every page. *@
         <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)">
+            @* Signed-out visitor on an [Authorize] page -> send them to the login page (and back afterwards). *@
             <NotAuthorized>
                 <RedirectToLogin />
             </NotAuthorized>
         </AuthorizeRouteView>
+        @* Accessibility: after navigating, move keyboard focus to the page's <h1>. *@
         <FocusOnNavigate RouteData="routeData" Selector="h1" />
     </Found>
 </Router>

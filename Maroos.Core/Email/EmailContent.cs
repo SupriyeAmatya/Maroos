@@ -1,3 +1,8 @@
+// =====================================================================================================
+// FILE: Maroos.Core/Email/EmailContent.cs
+// PURPOSE: Two small records passed around when building and queueing emails.
+// =====================================================================================================
+
 namespace Maroos.Core.Email;
 
 /// <summary>A finished email: subject, plain-text body and HTML body.</summary>

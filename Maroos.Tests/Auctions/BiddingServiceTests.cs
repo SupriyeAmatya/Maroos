@@ -1,3 +1,10 @@
+// =====================================================================================================
+// FILE: Maroos.Tests/Auctions/BiddingServiceTests.cs
+// PURPOSE: BiddingService: accepted/rejected bids, history with public names, the Bids profile tab states,
+//   AND the concurrency tests - many simultaneous bids on a file database must never break the rules.
+// Each test's name says what it proves; the '// TEST:' line above each one repeats it in plain words.
+// =====================================================================================================
+
 using Maroos.Core.Auctions;
 using Maroos.Web.Services;
 using Microsoft.EntityFrameworkCore;
@@ -21,6 +28,7 @@ public sealed class BiddingServiceTests : IDisposable
 
     public void Dispose() => _world.Dispose();
 
+    // TEST: Bids must beat the high bid by the increment.
     [Fact]
     public async Task Bids_must_beat_the_high_bid_by_the_increment()
     {
@@ -38,6 +46,7 @@ public sealed class BiddingServiceTests : IDisposable
         Assert.Equal(700, view.MinimumNextBid);
     }
 
+    // TEST: Seller cannot bid and high bidder cannot raise themselves.
     [Fact]
     public async Task Seller_cannot_bid_and_high_bidder_cannot_raise_themselves()
     {
@@ -48,6 +57,7 @@ public sealed class BiddingServiceTests : IDisposable
         Assert.Equal("You're already the highest bidder.", (await _world.Bidding.PlaceBidAsync(auction.Id, _bob, 900)).Error);
     }
 
+    // TEST: Ended cancelled and missing auctions reject bids.
     [Fact]
     public async Task Ended_cancelled_and_missing_auctions_reject_bids()
     {
@@ -64,6 +74,7 @@ public sealed class BiddingServiceTests : IDisposable
         Assert.Empty(db.Bids);
     }
 
+    // TEST: An accepted bid is announced with the bidders public name and a rejected one is not.
     [Fact]
     public async Task An_accepted_bid_is_announced_with_the_bidders_public_name_and_a_rejected_one_is_not()
     {
@@ -78,6 +89,7 @@ public sealed class BiddingServiceTests : IDisposable
         Assert.Equal((750L, "Bob", 1), (bid.AmountCents, bid.BidderName, bid.BidCount));
     }
 
+    // TEST: History lists bids highest first and marks the viewers own.
     [Fact]
     public async Task History_lists_bids_highest_first_and_marks_the_viewers_own()
     {
@@ -91,6 +103,7 @@ public sealed class BiddingServiceTests : IDisposable
         Assert.Equal([("Carol", 800L, false), ("Bob", 500L, true)], history.Select(h => (h.BidderName, h.AmountCents, h.IsViewer)));
     }
 
+    // TEST: My bids says winning outbid won lost or cancelled.
     [Fact]
     public async Task My_bids_says_winning_outbid_won_lost_or_cancelled()
     {
@@ -128,6 +141,7 @@ public sealed class ConcurrentBiddingTests : IDisposable
 
     public void Dispose() => _world.Dispose();
 
+    // TEST: Two bids of the same amount at the same moment cannot both win.
     [Fact]
     public async Task Two_bids_of_the_same_amount_at_the_same_moment_cannot_both_win()
     {
@@ -146,6 +160,7 @@ public sealed class ConcurrentBiddingTests : IDisposable
         Assert.Equal(1, await db.Bids.CountAsync());
     }
 
+    // TEST: A burst of parallel bids never breaks the increment rule.
     [Fact]
     public async Task A_burst_of_parallel_bids_never_breaks_the_increment_rule()
     {

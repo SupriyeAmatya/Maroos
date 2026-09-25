@@ -1,14 +1,24 @@
+// =====================================================================================================
+// FILE: Maroos.Core/Email/AuctionEmailContent.cs
+// PURPOSE: The text of the four auction emails: outbid, won, sold, and ended with no bids.
+// Prices are long cents, formatted with Money.FormatUsd. Every email links to the auction and says where to
+// turn auction emails off.
+// =====================================================================================================
+
 namespace Maroos.Core.Email;
 
 /// <param name="AuctionUrl">Absolute link to the auction page.</param>
 /// <param name="SettingsUrl">Absolute link to account settings, where auction emails can be turned off.</param>
+// AuctionEmailInfo: what every auction email needs about its auction (built by the web app's EmailOutbox.InfoFor).
 public sealed record AuctionEmailInfo(string CardName, string SetName, string AuctionUrl, string SettingsUrl);
 
 /// <summary>The auction emails. Card and display names are escaped in the HTML part.</summary>
 public static class AuctionEmailContent
 {
+    // Footer: why the reader gets this email, and where to turn these emails off.
     private const string Footer = "You get these emails because you bid on or listed this card. Turn them off in your account settings:";
 
+    // Outbid: to the previous high bidder. The new high bid, the minimum to take the lead back, and the time left.
     public static EmailContent Outbid(AuctionEmailInfo info, long highBidCents, long minimumNextBidCents, string timeLeft) => Build(info,
         $"You've been outbid on {info.CardName}",
         [
@@ -16,6 +26,7 @@ public static class AuctionEmailContent
             $"To win it, bid at least {Money.FormatUsd(minimumNextBidCents)}. Time left: {timeLeft}.",
         ]);
 
+    // Won: to the winner, with the seller's name and email (the same contact the auction page shows the winner).
     public static EmailContent Won(AuctionEmailInfo info, long priceCents, string sellerName, string sellerEmail) => Build(info,
         $"You won {info.CardName}",
         [
@@ -23,6 +34,7 @@ public static class AuctionEmailContent
             $"Contact the seller, {sellerName}, at {sellerEmail} to arrange payment and shipping. Maroos doesn't handle payment.",
         ]);
 
+    // Sold: to the seller, with the winner's name and email (the same contact the auction page shows the seller).
     public static EmailContent Sold(AuctionEmailInfo info, long priceCents, string winnerName, string winnerEmail) => Build(info,
         $"Your {info.CardName} sold for {Money.FormatUsd(priceCents)}",
         [
@@ -30,6 +42,7 @@ public static class AuctionEmailContent
             $"They'll contact you to arrange payment and shipping. You can also reach them at {winnerEmail}.",
         ]);
 
+    // Unsold: to the seller when nobody bid.
     public static EmailContent Unsold(AuctionEmailInfo info) => Build(info,
         $"Your auction for {info.CardName} ended with no bids",
         [
@@ -37,6 +50,8 @@ public static class AuctionEmailContent
             "You can list it again whenever you like.",
         ]);
 
+    // Build: the shared layout. Text: the paragraphs, the auction link, then the footer. HTML: the same, each
+    // paragraph encoded.
     private static EmailContent Build(AuctionEmailInfo info, string subject, string[] paragraphs)
     {
         var text = string.Join("\n\n", paragraphs)

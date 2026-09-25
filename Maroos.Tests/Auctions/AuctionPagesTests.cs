@@ -1,3 +1,10 @@
+// =====================================================================================================
+// FILE: Maroos.Tests/Auctions/AuctionPagesTests.cs
+// PURPOSE: bUnit tests (components rendered in memory) of ListCard.razor and AuctionPage.razor: listing a
+//   card, photo upload, validation messages, cancel permissions.
+// Each test's name says what it proves; the '// TEST:' line above each one repeats it in plain words.
+// =====================================================================================================
+
 using System.Security.Claims;
 using Bunit;
 using Maroos.Core.Auctions;
@@ -30,6 +37,7 @@ public sealed class AuctionPagesTests : BunitContext
     {
         var cards = new CardService(FakeScryfallHandler.WithFixtures().CreateClient(), _db, new MemoryCache(new MemoryCacheOptions()), TimeProvider.System);
         var events = new AuctionEvents(NullLogger<AuctionEvents>.Instance);
+        // The email outbox the services need (these tests never send anything).
         var emails = new EmailOutbox(_db, TestEmail.Options, new EmailSignal(), TimeProvider.System);
         _auctions = new AuctionService(_db, cards, events, emails, TimeProvider.System);
         Services.AddSingleton(cards);
@@ -52,6 +60,7 @@ public sealed class AuctionPagesTests : BunitContext
             Directory.Delete(_photoRoot, recursive: true);
     }
 
+    // Helper: Add user.
     private string AddUser(string email, string displayName)
     {
         using var db = _db.CreateDbContext();
@@ -61,6 +70,7 @@ public sealed class AuctionPagesTests : BunitContext
         return user.Id;
     }
 
+    // Helper: Sign in as.
     private void SignInAs(string userId)
     {
         var auth = AddAuthorization();
@@ -68,6 +78,7 @@ public sealed class AuctionPagesTests : BunitContext
         auth.SetClaims(new Claim(ClaimTypes.NameIdentifier, userId));
     }
 
+    // Helper: Find card.
     private static IRenderedComponent<ListCard> FindCard(IRenderedComponent<ListCard> page, string name)
     {
         var input = page.Find("input[type=search]");
@@ -77,12 +88,14 @@ public sealed class AuctionPagesTests : BunitContext
         return page;
     }
 
+    // Helper: Saved auctions.
     private Auction[] SavedAuctions()
     {
         using var db = _db.CreateDbContext();
         return db.Auctions.AsNoTracking().ToArray();
     }
 
+    // TEST: Listing a card saves the auction and opens it.
     [Fact]
     public void Listing_a_card_saves_the_auction_and_opens_it()
     {
@@ -107,6 +120,7 @@ public sealed class AuctionPagesTests : BunitContext
         Assert.Equal($"auctions/{auction.Id}", navigation.ToBaseRelativePath(navigation.Uri));
     }
 
+    // TEST: A photo upload is saved with the listing.
     [Fact]
     public void A_photo_upload_is_saved_with_the_listing()
     {
@@ -124,6 +138,7 @@ public sealed class AuctionPagesTests : BunitContext
         Assert.True(File.Exists(Path.Combine(_photoRoot, Path.GetFileName(auction.PhotoPath!))));
     }
 
+    // TEST: Wrong file types are refused before listing.
     [Fact]
     public void Wrong_file_types_are_refused_before_listing()
     {
@@ -138,6 +153,7 @@ public sealed class AuctionPagesTests : BunitContext
         Assert.Empty(SavedAuctions());
     }
 
+    // TEST: Missing card and bad prices are explained.
     [Fact]
     public void Missing_card_and_bad_prices_are_explained()
     {
@@ -154,6 +170,7 @@ public sealed class AuctionPagesTests : BunitContext
         Assert.Empty(SavedAuctions());
     }
 
+    // TEST: Auction page shows the listing and seller name to visitors without a cancel button.
     [Fact]
     public async Task Auction_page_shows_the_listing_and_seller_name_to_visitors_without_a_cancel_button()
     {
@@ -170,6 +187,7 @@ public sealed class AuctionPagesTests : BunitContext
         Assert.DoesNotContain("Cancel auction", page.Markup);
     }
 
+    // TEST: Other signed in users cannot cancel.
     [Fact]
     public async Task Other_signed_in_users_cannot_cancel()
     {
@@ -182,6 +200,7 @@ public sealed class AuctionPagesTests : BunitContext
         Assert.DoesNotContain("Cancel auction", page.Markup);
     }
 
+    // TEST: Seller can cancel after confirming.
     [Fact]
     public async Task Seller_can_cancel_after_confirming()
     {

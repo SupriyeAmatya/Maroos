@@ -1,3 +1,10 @@
+// =====================================================================================================
+// FILE: Maroos.Tests/Auctions/AuctionRulesTests.cs
+// PURPOSE: AuctionRules (Maroos.Core): listing validation (prices > 0, 1-7 days, known condition),
+//   condition labels, time-left and countdown text.
+// Each test's name says what it proves; the '// TEST:' line above each one repeats it in plain words.
+// =====================================================================================================
+
 using Maroos.Core;
 using Maroos.Core.Auctions;
 
@@ -5,11 +12,14 @@ namespace Maroos.Tests.Auctions;
 
 public class AuctionRulesTests
 {
+    // Helper: Valid.
     private static NewAuction Valid() => new(Guid.NewGuid(), CardCondition.NearMint, false, 500, 100, 7);
 
+    // TEST: A valid listing has no errors.
     [Fact]
     public void A_valid_listing_has_no_errors() => Assert.Empty(AuctionRules.Validate(Valid()));
 
+    // TEST: Rejects bad prices and durations.
     [Theory]
     [InlineData(0L, 100L, 7, "The starting price must be more than $0.")]
     [InlineData(-5L, 100L, 7, "The starting price must be more than $0.")]
@@ -24,6 +34,7 @@ public class AuctionRulesTests
         Assert.Equal([error], AuctionRules.Validate(request));
     }
 
+    // TEST: Requires a card and a known condition.
     [Fact]
     public void Requires_a_card_and_a_known_condition()
     {
@@ -32,6 +43,7 @@ public class AuctionRulesTests
         Assert.Equal(["Pick the card you're selling.", "Pick the card's condition."], AuctionRules.Validate(request));
     }
 
+    // TEST: Durations of one to seven days are allowed.
     [Theory]
     [InlineData(1, 1)]
     [InlineData(7, 7)]
@@ -41,6 +53,7 @@ public class AuctionRulesTests
         Assert.Equal(expected, days);
     }
 
+    // TEST: TimeLeft reads naturally.
     [Theory]
     [InlineData(0, "Ended")]
     [InlineData(-60, "Ended")]
@@ -55,6 +68,7 @@ public class AuctionRulesTests
         Assert.Equal(expected, AuctionRules.TimeLeft(now, now.AddSeconds(secondsLeft)));
     }
 
+    // TEST: Conditions have codes and labels.
     [Theory]
     [InlineData(CardCondition.NearMint, "NM", "Near Mint")]
     [InlineData(CardCondition.Damaged, "DMG", "Damaged")]
@@ -64,6 +78,7 @@ public class AuctionRulesTests
         Assert.Equal(label, AuctionRules.ConditionLabel(condition));
     }
 
+    // TEST: An auction is open until its end time while active.
     [Fact]
     public void An_auction_is_open_until_its_end_time_while_active()
     {
@@ -78,6 +93,7 @@ public class AuctionRulesTests
 
 public class MoneyTests
 {
+    // TEST: TryParseUsd reads typed dollar amounts.
     [Theory]
     [InlineData("5", 500L)]
     [InlineData("5.5", 550L)]
@@ -91,6 +107,7 @@ public class MoneyTests
         Assert.Equal(cents, parsed);
     }
 
+    // TEST: TryParseUsd rejects anything else.
     [Theory]
     [InlineData("")]
     [InlineData(null)]
@@ -101,6 +118,7 @@ public class MoneyTests
     [InlineData("99999999999999999999")]
     public void TryParseUsd_rejects_anything_else(string? text) => Assert.False(Money.TryParseUsd(text, out _));
 
+    // TEST: FormatInput writes plain amounts.
     [Theory]
     [InlineData(500L, "5.00")]
     [InlineData(125050L, "1250.50")]

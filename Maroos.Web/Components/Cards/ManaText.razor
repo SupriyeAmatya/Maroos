@@ -1,18 +1,29 @@
+@* =====================================================================================================
+   FILE: Maroos.Web/Components/Cards/ManaText.razor
+   PURPOSE: Shows card text or mana costs with real symbols: "{2}{R}" becomes two icons, "{T}" the tap icon.
+   USAGE: <ManaText Text="@card.ManaCost" />  or  <ManaText Text="@card.OracleText" />
+   The splitting logic lives in Maroos.Core/Scryfall/ManaSymbols.cs (tested separately).
+   ===================================================================================================== *@
 @* Renders text with {X} mana/tap symbols as Scryfall's SVG icons; newlines become line breaks. *@
 
+@* Split into lines first (card text uses \n between abilities). *@
 @{ var lines = (Text ?? "").Split('\n'); }
 @for (var i = 0; i < lines.Length; i++)
 {
+    @* A <br /> between lines (not before the first). *@
     if (i > 0)
     {
         <br />
     }
+    @* Each line is a mix of plain text and {symbols}. *@
     foreach (var token in ManaSymbols.Tokenize(lines[i]))
     {
+        @* Symbol -> Scryfall's SVG icon (alt text keeps "{R}" for screen readers and copy/paste). *@
         if (token.IsSymbol)
         {
             <img class="mana-symbol" src="@ManaSymbols.SvgUrl(token.Text)" alt="{@token.Text}" title="{@token.Text}" />
         }
+        @* Plain text -> shown as-is (Blazor HTML-encodes it, so card text can't inject HTML). *@
         else
         {
             @token.Text
@@ -21,5 +32,6 @@
 }
 
 @code {
+    // Text: the card text or mana cost to render (null shows nothing).
     [Parameter] public string? Text { get; set; }
 }

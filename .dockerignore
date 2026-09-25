@@ -1,12 +1,20 @@
+# =====================================================================================================
+# FILE: .dockerignore
+# PURPOSE: Files Docker must NOT send into the image build: build output, editor folders, git history,
+# the tests, and — most importantly — local data and secrets.
+# =====================================================================================================
+# Build output and editor/tool folders.
 **/bin/
 **/obj/
 **/.vs/
 **/.vscode/
 **/*.user
 .git/
+# Tests aren't part of the app image.
 Maroos.Tests/
 
 # Local data never goes into the image.
+# (The dev SQLite database, uploaded photos, and development settings/secrets.)
 **/*.db
 **/*.db-shm
 **/*.db-wal

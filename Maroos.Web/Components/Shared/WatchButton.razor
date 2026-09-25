@@ -1,3 +1,9 @@
+@* =====================================================================================================
+   FILE: Maroos.Web/Components/Shared/WatchButton.razor
+   PURPOSE: The "♡ Watch / ♥ Watching" button on deck and auction pages.
+   USAGE: <WatchButton Target="WatchTarget.Deck" TargetId="@deck.Id" />
+   Visitors see a link to the login page (which returns them here afterwards).
+   ===================================================================================================== *@
 @* Heart toggle that saves a deck or auction to the signed-in user's watchlist. *@
 
 @inject WatchService Watches
@@ -5,10 +11,13 @@
 
 @if (userId is null)
 {
+    @* Signed out: a link to log in. *@
     <a class="btn btn-sm btn-outline-secondary watch-button" href="@LoginUrl" title="Log in to save this to your watchlist">♡ Watch</a>
 }
 else
 {
+    @* Signed in: a toggle button. Red when watching; aria-pressed tells screen readers its state;
+       disabled while the click is being saved (prevents double clicks). *@
     <button type="button" class="btn btn-sm @(watching ? "btn-danger" : "btn-outline-secondary") watch-button"
             aria-pressed="@(watching ? "true" : "false")" disabled="@busy" @onclick="ToggleAsync"
             title="@(watching ? "Remove from your watchlist" : "Save to your watchlist")">
@@ -17,23 +26,29 @@ else
 }
 
 @code {
+    // Parameters set by the parent page: what kind of thing, and its id. EditorRequired = must be given.
     [Parameter, EditorRequired] public WatchTarget Target { get; set; }
     [Parameter, EditorRequired] public Guid TargetId { get; set; }
 
+    // The signed-in user (provided to every component by AddCascadingAuthenticationState).
     [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
 
+    // userId: null for visitors. watching: current state. busy: a toggle is in progress.
     private string? userId;
     private bool watching;
     private bool busy;
 
+    // LoginUrl: the login page, with ReturnUrl set to this page (URL-encoded).
     private string LoginUrl => $"Account/Login?ReturnUrl={Uri.EscapeDataString("/" + Navigation.ToBaseRelativePath(Navigation.Uri))}";
 
+    // OnParametersSetAsync: runs when the component starts or its parameters change — load the state.
     protected override async Task OnParametersSetAsync()
     {
         userId = (await AuthState).User.GetUserId();
         watching = userId is not null && await Watches.IsWatchingAsync(userId, Target, TargetId);
     }
 
+    // ToggleAsync: the click handler. WatchService adds or removes the watch and returns the new state.
     private async Task ToggleAsync()
     {
         busy = true;
@@ -41,6 +56,7 @@ else
         {
             watching = await Watches.ToggleAsync(userId!, Target, TargetId);
         }
+        // The deck was deleted or made private meanwhile: show "not watching".
         catch (KeyNotFoundException)
         {
             watching = false;

@@ -1,3 +1,10 @@
+// =====================================================================================================
+// FILE: Maroos.Tests/Scryfall/CardPagesTests.cs
+// PURPOSE: bUnit tests of the Search and Card pages and the CardAutocomplete box (debounce, arrow keys,
+//   Enter, Escape, single result jumps to the card).
+// Each test's name says what it proves; the '// TEST:' line above each one repeats it in plain words.
+// =====================================================================================================
+
 using Bunit;
 using Maroos.Web.Components.Pages;
 using Maroos.Web.Services;
@@ -28,6 +35,7 @@ public sealed class CardPagesTests : BunitContext
         _db.Dispose();
     }
 
+    // TEST: Search page shows a linked image for each result.
     [Fact]
     public void Search_page_shows_a_linked_image_for_each_result()
     {
@@ -45,6 +53,7 @@ public sealed class CardPagesTests : BunitContext
         Assert.Contains("2 cards", page.Markup);
     }
 
+    // TEST: Pressing enter in the search box navigates to the results url.
     [Fact]
     public void Pressing_enter_in_the_search_box_navigates_to_the_results_url()
     {
@@ -60,6 +69,7 @@ public sealed class CardPagesTests : BunitContext
         page.WaitForAssertion(() => Assert.Equal(2, page.FindAll(".card-grid-item").Count));
     }
 
+    // TEST: Typing shows suggestions and arrow keys plus enter open the highlighted card.
     [Fact]
     public void Typing_shows_suggestions_and_arrow_keys_plus_enter_open_the_highlighted_card()
     {
@@ -86,6 +96,7 @@ public sealed class CardPagesTests : BunitContext
             Assert.Equal($"card/{Fixtures.LightningBoltId}", navigation.ToBaseRelativePath(navigation.Uri)));
     }
 
+    // TEST: Clicking a suggestion opens that card.
     [Fact]
     public void Clicking_a_suggestion_opens_that_card()
     {
@@ -102,6 +113,7 @@ public sealed class CardPagesTests : BunitContext
             Assert.Equal($"card/{Fixtures.LightningBoltId}", navigation.ToBaseRelativePath(navigation.Uri)));
     }
 
+    // TEST: Escape closes the suggestions.
     [Fact]
     public void Escape_closes_the_suggestions()
     {
@@ -116,6 +128,7 @@ public sealed class CardPagesTests : BunitContext
         page.WaitForAssertion(() => Assert.Empty(page.FindAll("#card-suggestions")));
     }
 
+    // TEST: Search page says when nothing matches.
     [Fact]
     public void Search_page_says_when_nothing_matches()
     {
@@ -126,6 +139,7 @@ public sealed class CardPagesTests : BunitContext
         page.WaitForAssertion(() => Assert.Contains("No cards found", page.Markup));
     }
 
+    // TEST: Card page shows oracle text prices and legalities.
     [Fact]
     public void Card_page_shows_oracle_text_prices_and_legalities()
     {
@@ -143,6 +157,7 @@ public sealed class CardPagesTests : BunitContext
         Assert.Equal("Banned", historic.QuerySelector(".badge")!.TextContent);
     }
 
+    // TEST: Card page shows both faces of a double faced card.
     [Fact]
     public void Card_page_shows_both_faces_of_a_double_faced_card()
     {
@@ -153,6 +168,7 @@ public sealed class CardPagesTests : BunitContext
         Assert.Contains("Insectile Aberration", page.Markup);
     }
 
+    // TEST: Card page says when the card does not exist.
     [Fact]
     public void Card_page_says_when_the_card_does_not_exist()
     {

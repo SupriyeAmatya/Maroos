@@ -1,3 +1,10 @@
+// =====================================================================================================
+// FILE: Maroos.Tests/Auctions/BidRulesTests.cs
+// PURPOSE: BidRules (Maroos.Core): minimum next bid, and every rejection reason (cancelled, ended, own
+//   listing, already highest, too low, over the cap).
+// Each test's name says what it proves; the '// TEST:' line above each one repeats it in plain words.
+// =====================================================================================================
+
 using Maroos.Core.Auctions;
 
 namespace Maroos.Tests.Auctions;
@@ -6,6 +13,7 @@ public class BidRulesTests
 {
     private static readonly DateTime Now = new(2026, 9, 23, 12, 0, 0, DateTimeKind.Utc);
 
+    // Helper: Open.
     private static Auction Open() => new()
     {
         SellerId = "seller",
@@ -15,6 +23,7 @@ public class BidRulesTests
         EndsAtUtc = Now.AddDays(1),
     };
 
+    // TEST: The first bid must meet the starting price and later ones the increment.
     [Fact]
     public void The_first_bid_must_meet_the_starting_price_and_later_ones_the_increment()
     {
@@ -27,6 +36,7 @@ public class BidRulesTests
         Assert.Equal("Bids must be at least $13.00.", BidRules.Validate(Open(), "bob", 1299, 1200, "carol", Now));
     }
 
+    // TEST: The seller and the current high bidder cannot bid.
     [Fact]
     public void The_seller_and_the_current_high_bidder_cannot_bid()
     {
@@ -34,6 +44,7 @@ public class BidRulesTests
         Assert.Equal("You're already the highest bidder.", BidRules.Validate(Open(), "bob", 2000, 1200, "bob", Now));
     }
 
+    // TEST: Ended and cancelled auctions take no bids.
     [Fact]
     public void Ended_and_cancelled_auctions_take_no_bids()
     {
@@ -44,12 +55,14 @@ public class BidRulesTests
         Assert.Equal("This auction was cancelled.", BidRules.Validate(cancelled, "bob", 900, null, null, Now));
     }
 
+    // TEST: Bids are capped at the price limit.
     [Fact]
     public void Bids_are_capped_at_the_price_limit()
     {
         Assert.Equal("Bids can't be more than $1,000,000.00.", BidRules.Validate(Open(), "bob", AuctionRules.MaxPriceCents + 1, null, null, Now));
     }
 
+    // TEST: Countdown ticks in seconds.
     [Theory]
     [InlineData(0, "Ended")]
     [InlineData(1, "00:00:01")]

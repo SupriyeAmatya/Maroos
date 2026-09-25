@@ -1,3 +1,9 @@
+@* =====================================================================================================
+   FILE: Maroos.Web/Components/Pages/Auctions.razor      URL: /auctions?q=&set=&max=&sort=
+   PURPOSE: Browse open auctions as a grid of tiles, with filters: card name, set, max price, and sort order.
+   HOW: a plain HTML GET form — "Apply" reloads the page with the filters in the URL, so filtered views can
+   be bookmarked/shared, and the page works without a live connection (static server rendering).
+   ===================================================================================================== *@
 @page "/auctions"
 
 @inject AuctionService AuctionService
@@ -10,11 +16,13 @@
     <a class="btn btn-primary" href="auctions/new">List a card</a>
 </div>
 
+@* ---- Filter form. Each field's name becomes a query-string key (q, set, max, sort). ---- *@
 <form class="auction-filters mb-4" method="get" action="auctions" role="search" aria-label="Filter auctions">
     <div class="auction-filter auction-filter-wide">
         <label for="filter-q" class="form-label small mb-1">Card name</label>
         <input id="filter-q" name="q" class="form-control" value="@Q" placeholder="Any card" />
     </div>
+    @* Set: only sets that currently have open auctions, with a count, e.g. "Double Masters 2022 (3)". *@
     <div class="auction-filter">
         <label for="filter-set" class="form-label small mb-1">Set</label>
         <select id="filter-set" name="set" class="form-select">
@@ -25,6 +33,7 @@
             }
         </select>
     </div>
+    @* Max price in dollars (text; parsed with Money.TryParseUsd). inputmode="decimal" shows a number pad on phones. *@
     <div class="auction-filter auction-filter-narrow">
         <label for="filter-max" class="form-label small mb-1">Max price</label>
         <div class="input-group">
@@ -46,11 +55,13 @@
     </div>
 </form>
 
+@* A max price that isn't a number is ignored — and the page says so. *@
 @if (maxInvalid)
 {
     <div class="alert alert-warning py-2">“@Max” isn't a price, so the max price filter is off.</div>
 }
 
+@* Empty state: different wording when filters are on (with a "clear the filters" link). *@
 @if (auctions.Count == 0)
 {
     <p>
@@ -68,6 +79,7 @@ else
     <div class="auction-grid">
         @foreach (var auction in auctions)
         {
+            @* One tile: image, name, "set · condition · Foil", current price, time left. *@
             <a class="auction-tile card" href="auctions/@auction.Id">
                 <div class="auction-tile-image">
                     @if (auction.ImageUrl is { } image)
@@ -95,6 +107,7 @@ else
 }
 
 @code {
+    // SortOptions: URL value -> label shown in the dropdown.
     private static readonly (string Value, string Label)[] SortOptions =
     [
         ("ending", "Ending soonest"),
@@ -103,24 +116,30 @@ else
         ("price-desc", "Price: high to low"),
     ];
 
+    // The filters from the URL (all optional, all strings so bad input can't crash the page).
     [SupplyParameterFromQuery] public string? Q { get; set; }
     [SupplyParameterFromQuery] public string? Set { get; set; }
     [SupplyParameterFromQuery] public string? Max { get; set; }
     [SupplyParameterFromQuery(Name = "sort")] public string? SortParam { get; set; }
 
+    // Page state: results, set options, current time, chosen sort, whether Max was unreadable.
     private IReadOnlyList<AuctionSummary> auctions = [];
     private IReadOnlyList<AuctionSetOption> sets = [];
     private DateTime now;
     private string sort = "ending";
     private bool maxInvalid;
 
+    // IsFiltered: any filter in use?
     private bool IsFiltered => !string.IsNullOrWhiteSpace(Q) || !string.IsNullOrWhiteSpace(Set) || !string.IsNullOrWhiteSpace(Max);
 
+    // OnInitializedAsync: turn the URL values into an AuctionFilter and load the results.
     protected override async Task OnInitializedAsync()
     {
         now = Clock.GetUtcNow().UtcDateTime;
+        // Unknown sort values fall back to "ending".
         sort = SortOptions.Any(o => o.Value == SortParam) ? SortParam! : "ending";
 
+        // "$12.50" / "12.5" -> 1250 cents; anything unreadable switches the filter off with a warning.
         long? maxCents = null;
         if (!string.IsNullOrWhiteSpace(Max))
         {
@@ -130,6 +149,7 @@ else
                 maxInvalid = true;
         }
 
+        // Map the URL sort value to the AuctionSort enum.
         var filter = new AuctionFilter(Q, Set, maxCents, sort switch
         {
             "newest" => AuctionSort.Newest,

@@ -1,3 +1,11 @@
+// =====================================================================================================
+// FILE: Maroos.Tests/Deploy/DeployReadinessTests.cs
+// PURPOSE: Phase 7 checks: DatabaseSetupTests (provider choice, postgres:// URLs, DATABASE_URL, fail-fast),
+//   SitePolishHttpTests (footer, security headers, /health, 404 page, uploads), SignedOutGuardTests, and
+//   QueryCountTests (list pages use a fixed number of queries, not one per row).
+// Each test's name says what it proves; the '// TEST:' line above each one repeats it in plain words.
+// =====================================================================================================
+
 using Maroos.Core.Auctions;
 using Maroos.Core.Decks;
 using Maroos.Core.Watchlist;
@@ -17,6 +25,7 @@ namespace Maroos.Tests.Deploy;
 
 public class DatabaseSetupTests
 {
+    // Helper: Config.
     private static IConfiguration Config(string? provider) =>
         new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["Database:Provider"] = provider }).Build();
 
@@ -28,6 +37,7 @@ public class DatabaseSetupTests
         public Microsoft.Extensions.FileProviders.IFileProvider ContentRootFileProvider { get; set; } = null!;
     }
 
+    // TEST: Provider defaults by environment and can be overridden.
     [Theory]
     [InlineData(null, "Development", "Sqlite")]
     [InlineData(null, "Production", "Postgres")]
@@ -36,10 +46,12 @@ public class DatabaseSetupTests
     public void Provider_defaults_by_environment_and_can_be_overridden(string? configured, string environment, string expected) =>
         Assert.Equal(expected, DatabaseSetup.ProviderFor(Config(configured), new Env(environment)));
 
+    // TEST: An unknown provider is an error.
     [Fact]
     public void An_unknown_provider_is_an_error() =>
         Assert.Throws<InvalidOperationException>(() => DatabaseSetup.ProviderFor(Config("mysql"), new Env("Production")));
 
+    // TEST: Postgres urls from hosting providers become npgsql connection strings.
     [Fact]
     public void Postgres_urls_from_hosting_providers_become_npgsql_connection_strings()
     {
@@ -54,6 +66,7 @@ public class DatabaseSetupTests
         Assert.Equal(SslMode.Require, builder.SslMode);
     }
 
+    // TEST: DATABASE URL is used when no connection string is set.
     [Fact]
     public void DATABASE_URL_is_used_when_no_connection_string_is_set()
     {
@@ -74,6 +87,7 @@ public class DatabaseSetupTests
         Assert.Equal(("maroos-db.flycast", "maroos", "fly"), (connection.Host, connection.Database, connection.Username));
     }
 
+    // TEST: Production without any postgres connection refuses to start.
     [Fact]
     public void Production_without_any_postgres_connection_refuses_to_start()
     {
@@ -86,6 +100,7 @@ public class DatabaseSetupTests
         Assert.Contains("ConnectionStrings__DefaultConnection (or DATABASE_URL)", error.Message);
     }
 
+    // TEST: Photo storage falls back to the bucket variables hosts set.
     [Fact]
     public void Photo_storage_falls_back_to_the_bucket_variables_hosts_set()
     {
@@ -108,6 +123,7 @@ public class DatabaseSetupTests
         Assert.Equal(("mine", "eu-west-1"), (explicitWins.S3.Bucket, explicitWins.S3.Region));
     }
 
+    // TEST: Kerberos probing is off unless asked for.
     [Fact]
     public void Kerberos_probing_is_off_unless_asked_for()
     {
@@ -117,6 +133,7 @@ public class DatabaseSetupTests
             new NpgsqlConnectionStringBuilder(DatabaseSetup.WithoutKerberosProbe("Host=db;Database=maroos;GSS Encryption Mode=Require")).GssEncryptionMode);
     }
 
+    // TEST: Default port and plain connection strings are handled.
     [Fact]
     public void Default_port_and_plain_connection_strings_are_handled()
     {
@@ -135,6 +152,7 @@ public class SitePolishHttpTests : IClassFixture<MaroosWebFactory>, IAsyncLifeti
     public Task InitializeAsync() => _factory.InitializeDatabaseAsync();
     public Task DisposeAsync() => Task.CompletedTask;
 
+    // TEST: Every page credits scryfall and carries the fan content notice.
     [Theory]
     [InlineData("/")]
     [InlineData("/auctions")]
@@ -150,6 +168,7 @@ public class SitePolishHttpTests : IClassFixture<MaroosWebFactory>, IAsyncLifeti
         Assert.Contains("©Wizards of the Coast LLC.", html);
     }
 
+    // TEST: Responses carry security headers.
     [Fact]
     public async Task Responses_carry_security_headers()
     {
@@ -161,6 +180,7 @@ public class SitePolishHttpTests : IClassFixture<MaroosWebFactory>, IAsyncLifeti
         Assert.Equal("frame-ancestors 'none'", response.Headers.GetValues("Content-Security-Policy").Single());
     }
 
+    // TEST: Health endpoint reports the database is reachable.
     [Fact]
     public async Task Health_endpoint_reports_the_database_is_reachable()
     {
@@ -170,6 +190,7 @@ public class SitePolishHttpTests : IClassFixture<MaroosWebFactory>, IAsyncLifeti
         Assert.Equal("Healthy", await response.Content.ReadAsStringAsync());
     }
 
+    // TEST: Uploads only serve existing generated photo keys.
     [Theory]
     [InlineData("/uploads/..%2F..%2Fappsettings.json")]
     [InlineData("/uploads/web.config")]
@@ -182,6 +203,7 @@ public class SitePolishHttpTests : IClassFixture<MaroosWebFactory>, IAsyncLifeti
         Assert.NotEqual("image/jpeg", response.Content.Headers.ContentType?.MediaType);
     }
 
+    // TEST: Uploaded photos are cached forever.
     [Fact]
     public async Task Uploaded_photos_are_cached_forever()
     {
@@ -195,6 +217,7 @@ public class SitePolishHttpTests : IClassFixture<MaroosWebFactory>, IAsyncLifeti
         Assert.Equal("public, max-age=31536000, immutable", response.Headers.CacheControl!.ToString());
     }
 
+    // TEST: Login cookie keys are stored in the database so redeploys keep people signed in.
     [Fact]
     public async Task Login_cookie_keys_are_stored_in_the_database_so_redeploys_keep_people_signed_in()
     {
@@ -213,6 +236,7 @@ public sealed class SignedOutGuardTests : IDisposable
 
     public void Dispose() => _world.Dispose();
 
+    // TEST: Writes without a user are refused.
     [Fact]
     public async Task Writes_without_a_user_are_refused()
     {
@@ -247,6 +271,7 @@ public sealed class QueryCountTests : IDisposable
 
     public void Dispose() => _world.Dispose();
 
+    // Helper: List many async.
     private async Task<List<Auction>> ListManyAsync(int count, int days = 7)
     {
         var auctions = new List<Auction>();
@@ -260,6 +285,7 @@ public sealed class QueryCountTests : IDisposable
         return auctions;
     }
 
+    // Helper: Count async.
     private async Task<int> CountAsync(Func<Task> action)
     {
         _queries.Reset();
@@ -267,6 +293,7 @@ public sealed class QueryCountTests : IDisposable
         return _queries.Count;
     }
 
+    // TEST: Listing pages use the same number of queries for 2 or 20 rows.
     [Theory]
     [InlineData(2)]
     [InlineData(20)]
@@ -281,6 +308,7 @@ public sealed class QueryCountTests : IDisposable
         Assert.Equal(2, await CountAsync(() => _world.Watches.ListAsync(_bidders[0])));                    // decks + auctions
     }
 
+    // TEST: A deck page loads in two queries however many cards it has.
     [Fact]
     public async Task A_deck_page_loads_in_two_queries_however_many_cards_it_has()
     {
@@ -290,6 +318,7 @@ public sealed class QueryCountTests : IDisposable
         Assert.Equal(2, await CountAsync(() => _world.Decks.GetAsync(deck.Id, _seller))); // deck with cards + cached cards
     }
 
+    // TEST: Closing many auctions does not query each one.
     [Fact]
     public async Task Closing_many_auctions_does_not_query_each_one()
     {

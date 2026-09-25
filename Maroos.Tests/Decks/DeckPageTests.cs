@@ -1,3 +1,10 @@
+// =====================================================================================================
+// FILE: Maroos.Tests/Decks/DeckPageTests.cs
+// PURPOSE: bUnit tests of DeckPage.razor: owner vs visitor controls, add card, +/-, import add/replace with
+//   problem lines, export, settings, delete, private decks hidden.
+// Each test's name says what it proves; the '// TEST:' line above each one repeats it in plain words.
+// =====================================================================================================
+
 using System.Security.Claims;
 using Bunit;
 using Maroos.Core.Decks;
@@ -37,6 +44,7 @@ public sealed class DeckPageTests : BunitContext
         _db.Dispose();
     }
 
+    // Helper: Add user.
     private string AddUser(string email)
     {
         using var db = _db.CreateDbContext();
@@ -46,6 +54,7 @@ public sealed class DeckPageTests : BunitContext
         return user.Id;
     }
 
+    // Helper: Sign in as.
     private void SignInAs(string userId)
     {
         var auth = AddAuthorization();
@@ -53,6 +62,7 @@ public sealed class DeckPageTests : BunitContext
         auth.SetClaims(new Claim(ClaimTypes.NameIdentifier, userId));
     }
 
+    // Helper: Deck async.
     private async Task<Guid> DeckAsync(bool isPublic, string list)
     {
         var deck = await _decks.CreateAsync(_alice, "Burn", "modern", isPublic);
@@ -60,6 +70,7 @@ public sealed class DeckPageTests : BunitContext
         return deck.Id;
     }
 
+    // Helper: Render deck.
     private IRenderedComponent<DeckPage> RenderDeck(Guid id)
     {
         var page = Render<DeckPage>(p => p.Add(d => d.Id, id));
@@ -67,9 +78,11 @@ public sealed class DeckPageTests : BunitContext
         return page;
     }
 
+    // Helper: Heading.
     private static string Heading(IRenderedComponent<DeckPage> page, string name) =>
         page.FindAll(".deck-group-heading").Select(h => h.TextContent.Trim()).Single(h => h.StartsWith(name));
 
+    // TEST: Owner sees cards grouped by type with counts.
     [Fact]
     public async Task Owner_sees_cards_grouped_by_type_with_counts()
     {
@@ -84,6 +97,7 @@ public sealed class DeckPageTests : BunitContext
         Assert.Contains("Sideboard 3", page.Find(".deck-header").TextContent);
     }
 
+    // TEST: Plus and minus buttons change the count.
     [Fact]
     public async Task Plus_and_minus_buttons_change_the_count()
     {
@@ -99,6 +113,7 @@ public sealed class DeckPageTests : BunitContext
         page.WaitForAssertion(() => Assert.Equal("Instants (3)", Heading(page, "Instants")));
     }
 
+    // TEST: Visitors can view a public deck but not edit it.
     [Fact]
     public async Task Visitors_can_view_a_public_deck_but_not_edit_it()
     {
@@ -114,6 +129,7 @@ public sealed class DeckPageTests : BunitContext
         Assert.Equal(["Export"], toolbar);
     }
 
+    // TEST: Private decks look missing to everyone else.
     [Fact]
     public async Task Private_decks_look_missing_to_everyone_else()
     {
@@ -126,6 +142,7 @@ public sealed class DeckPageTests : BunitContext
         Assert.DoesNotContain("Lightning Bolt", page.Markup);
     }
 
+    // TEST: Importing a pasted list adds the cards and reports problems.
     [Fact]
     public async Task Importing_a_pasted_list_adds_the_cards_and_reports_problems()
     {
@@ -142,6 +159,7 @@ public sealed class DeckPageTests : BunitContext
         Assert.Equal("Lands (20)", Heading(page, "Lands"));
     }
 
+    // TEST: Adding a card by name puts it on the chosen board.
     [Fact]
     public async Task Adding_a_card_by_name_puts_it_on_the_chosen_board()
     {
@@ -159,6 +177,7 @@ public sealed class DeckPageTests : BunitContext
         Assert.Equal("", page.Find(".deck-add input[type=search]").GetAttribute("value") ?? "");
     }
 
+    // TEST: Adding an unknown card says so.
     [Fact]
     public async Task Adding_an_unknown_card_says_so()
     {
@@ -173,6 +192,7 @@ public sealed class DeckPageTests : BunitContext
         page.WaitForAssertion(() => Assert.Contains("Scryfall has no card named “Not A Real Card”.", page.Find(".deck-status").TextContent));
     }
 
+    // TEST: Export shows the list and copies it.
     [Fact]
     public async Task Export_shows_the_list_and_copies_it()
     {
@@ -192,6 +212,7 @@ public sealed class DeckPageTests : BunitContext
         Assert.Contains("Deck list copied.", page.Find(".deck-status").TextContent);
     }
 
+    // TEST: A banned card shows a warning and flags its row.
     [Fact]
     public async Task A_banned_card_shows_a_warning_and_flags_its_row()
     {
@@ -211,6 +232,7 @@ public sealed class DeckPageTests : BunitContext
         Assert.Equal("Banned", boltRow.QuerySelector(".deck-row-flag")!.TextContent);
     }
 
+    // TEST: A legal deck says so and its curve matches a manual count.
     [Fact]
     public async Task A_legal_deck_says_so_and_its_curve_matches_a_manual_count()
     {
@@ -228,6 +250,7 @@ public sealed class DeckPageTests : BunitContext
         Assert.Contains("52", page.FindAll(".deck-types tr").Single(r => r.GetAttribute("data-type") == CardTypes.Land).TextContent);
     }
 
+    // TEST: Changing the format rechecks legality.
     [Fact]
     public async Task Changing_the_format_rechecks_legality()
     {
@@ -244,6 +267,7 @@ public sealed class DeckPageTests : BunitContext
         Assert.Contains("Legal in Vintage", page.Find(".deck-legal-badge").TextContent);
     }
 
+    // TEST: Owner can rename and make the deck public.
     [Fact]
     public async Task Owner_can_rename_and_make_the_deck_public()
     {

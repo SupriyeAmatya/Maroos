@@ -1,3 +1,14 @@
+/* =====================================================================================================
+   FILE: Maroos.Web/Components/Layout/NavMenu.razor.css
+   PURPOSE: Styles for the top navigation bar (scoped to NavMenu.razor).
+     * a sticky dark bar with the brand, the section icons, and the right-hand group;
+     * icons drawn as CSS masks so they take the text color;
+     * labels as small tags under the icons, shown on hover/keyboard focus;
+     * pinned mode (html.nav-pinned, set by wwwroot/nav.js): labels always visible next to the icons;
+     * tighter spacing on phones so the icon-only bar fits one row.
+   "::deep" reaches elements rendered by child components (NavLink's own <a>).
+   ===================================================================================================== */
+/* The bar: stays at the top while scrolling (sticky), above page content (z-index). */
 .site-nav {
     position: sticky;
     top: 0;
@@ -6,6 +17,7 @@
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
 }
 
+/* Its contents in a row that wraps on narrow screens; at least --site-nav-height tall (app.css). */
 .site-nav-inner {
     display: flex;
     flex-wrap: wrap;
@@ -15,6 +27,7 @@
     padding: 0.35rem 1rem;
 }
 
+/* The "Maroos" name on the left. */
 .site-brand {
     color: white;
     font-size: 1.15rem;
@@ -27,6 +40,7 @@
         color: white;
     }
 
+/* A list of links laid out in a row (no bullets, no spacing from the browser). */
 .nav-items {
     display: flex;
     flex-wrap: wrap;
@@ -37,15 +51,18 @@
     padding: 0;
 }
 
+/* The right-hand group: margin-left: auto pushes it to the far right. */
 .nav-items-end {
     margin-left: auto;
 }
 
+/* The Log out form sits inline with the links. */
 .site-nav ::deep form {
     margin: 0;
 }
 
 /* NavLink renders its own <a>, so the link styles need ::deep. */
+/* Every link and button: a square-ish target at least 2.5rem wide, icon and label side by side. */
 .site-nav ::deep .nav-link {
     position: relative;
     display: flex;
@@ -64,17 +81,20 @@
     cursor: pointer;
 }
 
+    /* Hover: a faint highlight. */
     .site-nav ::deep .nav-link:hover {
         background-color: rgba(255, 255, 255, 0.1);
         color: white;
     }
 
+    /* The current page (NavLink's "active" class) and the pin while it's on: a stronger highlight. */
     .site-nav ::deep .nav-link.active,
     .site-nav ::deep .nav-pin[aria-pressed="true"] {
         background-color: rgba(255, 255, 255, 0.28);
         color: white;
     }
 
+    /* Keyboard focus: a clear white outline. */
     .site-nav ::deep .nav-link:focus-visible {
         outline: 2px solid white;
         outline-offset: 2px;
@@ -90,6 +110,7 @@
     mask: var(--icon) center / contain no-repeat;
 }
 
+/* The icons: small line drawings (24x24 SVG), one per link, used as the mask above. */
 .site-nav ::deep .icon-home {
     --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 11l9-7 9 7'/%3E%3Cpath d='M5 10v10h5v-6h4v6h5V10'/%3E%3C/svg%3E");
 }
@@ -150,6 +171,7 @@
     transition: opacity 0.12s ease, transform 0.12s ease;
 }
 
+/* Hovered or keyboard-focused: the label fades in and slides into place. */
 .site-nav ::deep .nav-link:hover .nav-label,
 .site-nav ::deep .nav-link:focus-visible .nav-label {
     opacity: 1;
@@ -163,6 +185,7 @@
     transform: translateY(-3px);
 }
 
+/* ...and for the right-hand group, without the centering shift. */
 .nav-items-end ::deep .nav-link:hover .nav-label,
 .nav-items-end ::deep .nav-link:focus-visible .nav-label {
     transform: none;
@@ -204,6 +227,7 @@ html.nav-pinned .site-nav ::deep .nav-link:focus-visible .nav-label {
     }
 }
 
+/* People who ask their system for less motion get no label animation. */
 @media (prefers-reduced-motion: reduce) {
     .site-nav ::deep .nav-label {
         transition: none;

@@ -1,13 +1,22 @@
+@* =====================================================================================================
+   FILE: Maroos.Web/Components/Pages/Home.razor      URL: /
+   PURPOSE: The landing page: a big card search box, three shortcut tiles (build a deck, browse auctions,
+   sell a card) and up to six auctions that end soonest.
+   RENDERING: static server-side rendering (no @rendermode) — plain HTML, no live connection needed.
+   The search box is a normal HTML form (GET /search?q=...), so it works even before Blazor starts.
+   ===================================================================================================== *@
 @page "/"
 
 @inject AuctionService AuctionService
 @inject TimeProvider Clock
 
+@* PageTitle sets the browser tab title. *@
 <PageTitle>Maroos · Magic decks and card auctions</PageTitle>
 
 <section class="home-hero mb-4">
     <h1>Maroos</h1>
     <p class="lead mb-3">Build Magic: The Gathering decks, check them against your format, and bid on cards other players are selling.</p>
+    @* role="search" marks this as the site search for assistive technology. *@
     <form class="home-search" method="get" action="search" role="search">
         <div class="input-group input-group-lg">
             <input name="q" class="form-control" aria-label="Search for a card" placeholder="Search for a card, e.g. Lightning Bolt" />
@@ -16,6 +25,7 @@
     </form>
 </section>
 
+@* Shortcut tiles to the three main things you can do. *@
 <div class="home-links mb-5">
     <a class="card card-body home-link" href="decks/new">
         <span class="h5 mb-1">Build a deck</span>
@@ -31,6 +41,7 @@
     </a>
 </div>
 
+@* "Ending soon" only appears when there are open auctions. *@
 @if (endingSoon.Count > 0)
 {
     <section aria-labelledby="ending-soon-heading">
@@ -41,6 +52,7 @@
         <div class="auction-grid">
             @foreach (var auction in endingSoon)
             {
+                @* One tile: image (seller photo or Scryfall image), name, current price, time left. *@
                 <a class="auction-tile card" href="auctions/@auction.Id">
                     <div class="auction-tile-image">
                         @if (auction.ImageUrl is { } image)
@@ -66,9 +78,11 @@
 }
 
 @code {
+    // endingSoon: the tiles to show. now: the time used for "time left".
     private IReadOnlyList<AuctionSummary> endingSoon = [];
     private DateTime now;
 
+    // OnInitializedAsync: runs once while the page renders. The default filter sorts by "ending soon".
     protected override async Task OnInitializedAsync()
     {
         now = Clock.GetUtcNow().UtcDateTime;

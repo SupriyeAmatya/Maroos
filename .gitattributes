@@ -1,3 +1,8 @@
+# =====================================================================================================
+# FILE: .gitattributes
+# PURPOSE: On Windows, git may convert line endings to CRLF on checkout. Linux tools inside containers
+# (and YAML/TOML parsers) expect LF, so these files are always checked out with LF.
+# =====================================================================================================
 # Files that run inside Linux containers or are read by Linux tooling keep LF line endings.
 Dockerfile      text eol=lf
 .dockerignore   text eol=lf

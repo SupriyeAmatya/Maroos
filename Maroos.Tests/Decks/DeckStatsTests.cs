@@ -1,3 +1,10 @@
+// =====================================================================================================
+// FILE: Maroos.Tests/Decks/DeckStatsTests.cs
+// PURPOSE: DeckStats (Maroos.Core): mana curve (0-6, 7+; lands excluded), average mana value, colors and
+//   pips, types, total price with foils and unpriced cards.
+// Each test's name says what it proves; the '// TEST:' line above each one repeats it in plain words.
+// =====================================================================================================
+
 using Maroos.Core.Decks;
 using Maroos.Core.Scryfall;
 using static Maroos.Tests.Decks.TestCards;
@@ -6,6 +13,7 @@ namespace Maroos.Tests.Decks;
 
 public class DeckStatsTests
 {
+    // TEST: Curve counts non land cards by mana value with 7 and up together.
     [Fact]
     public void Curve_counts_non_land_cards_by_mana_value_with_7_and_up_together()
     {
@@ -26,6 +34,7 @@ public class DeckStatsTests
         Assert.Equal(12, stats.NonLandCount);
     }
 
+    // TEST: Curve and types skip the sideboard but include the commander.
     [Fact]
     public void Curve_and_types_skip_the_sideboard_but_include_the_commander()
     {
@@ -40,6 +49,7 @@ public class DeckStatsTests
         Assert.Equal([KeyValuePair.Create(CardTypes.Creature, 1), KeyValuePair.Create(CardTypes.Instant, 1)], stats.Types);
     }
 
+    // TEST: Types follow the deck display order.
     [Fact]
     public void Types_follow_the_deck_display_order()
     {
@@ -56,6 +66,7 @@ public class DeckStatsTests
             stats.Types.Select(kv => (kv.Key, kv.Value)));
     }
 
+    // TEST: Colors count cards per color and mana symbols.
     [Fact]
     public void Colors_count_cards_per_color_and_mana_symbols()
     {
@@ -77,6 +88,7 @@ public class DeckStatsTests
         ], stats.Colors);
     }
 
+    // TEST: Double faced cards use their front face colors and cost.
     [Fact]
     public void Double_faced_cards_use_their_front_face_colors_and_cost()
     {
@@ -88,6 +100,7 @@ public class DeckStatsTests
         Assert.Equal([0, 4, 0, 0, 0, 0, 0, 0], Stats(stats.ManaCurve));
     }
 
+    // TEST: Total price sums every board and counts cards without a price.
     [Fact]
     public void Total_price_sums_every_board_and_counts_cards_without_a_price()
     {
@@ -104,6 +117,7 @@ public class DeckStatsTests
         Assert.Equal(2, stats.UnpricedCount);
     }
 
+    // TEST: Average mana value ignores lands.
     [Fact]
     public void Average_mana_value_ignores_lands()
     {
@@ -112,6 +126,7 @@ public class DeckStatsTests
         Assert.Equal(2.5m, stats.AverageManaValue);
     }
 
+    // TEST: An empty deck has empty stats.
     [Fact]
     public void An_empty_deck_has_empty_stats()
     {
@@ -124,5 +139,6 @@ public class DeckStatsTests
         Assert.Equal(0m, stats.AverageManaValue);
     }
 
+    // Helper: Stats.
     private static int[] Stats(IReadOnlyList<int> curve) => [.. curve];
 }

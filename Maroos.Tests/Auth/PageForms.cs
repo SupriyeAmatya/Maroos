@@ -1,3 +1,11 @@
+// =====================================================================================================
+// FILE: Maroos.Tests/Auth/PageForms.cs
+// PURPOSE: Lets HTTP tests behave like a real browser on the site's server-rendered forms:
+//   1. GET the page and pull the hidden antiforgery token out of the HTML;
+//   2. POST the form fields + token + the form's handler name, keeping cookies (so the user stays logged in).
+// Used to register, log in, and submit other forms in end-to-end HTTP tests.
+// =====================================================================================================
+
 using System.Text.RegularExpressions;
 using Maroos.Core.Email;
 using Maroos.Web.Data;
@@ -10,20 +18,25 @@ namespace Maroos.Tests.Auth;
 /// <summary>Posts the site's server-rendered forms over HTTP the way a browser does (antiforgery token, cookies).</summary>
 public static partial class PageForms
 {
+    // The password every test account uses (meets the 8-character rule).
     public const string Password = "Correct-horse-1";
 
+    // NewBrowser: an HttpClient that follows redirects and keeps cookies, like a browser tab.
     public static HttpClient NewBrowser(this MaroosWebFactory factory) =>
         factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = true, HandleCookies = true });
 
+    // Finds <input name="__RequestVerificationToken" ... value="..."> and captures the value.
     [GeneratedRegex("name=\"__RequestVerificationToken\"[^>]*value=\"([^\"]+)\"")]
     private static partial Regex AntiforgeryField();
 
+    // AntiforgeryTokenAsync: load a page and return its antiforgery token.
     public static async Task<string> AntiforgeryTokenAsync(HttpClient browser, string url)
     {
         var html = await browser.GetStringAsync(url);
         return AntiforgeryField().Match(html).Groups[1].Value;
     }
 
+    // PostFormAsync: submit a form. `handler` is the Blazor FormName (e.g. "register", "login").
     public static async Task<HttpResponseMessage> PostFormAsync(HttpClient browser, string url, string handler, Dictionary<string, string> fields)
     {
         fields["__RequestVerificationToken"] = await AntiforgeryTokenAsync(browser, url);
@@ -31,6 +44,7 @@ public static partial class PageForms
         return await browser.PostAsync(url, new FormUrlEncodedContent(fields));
     }
 
+    // RegisterAsync: create an account through the real Register page (the browser ends up signed in).
     public static Task<HttpResponseMessage> RegisterAsync(HttpClient browser, string email, string displayName = "Test Player") =>
         PostFormAsync(browser, "/Account/Register", "register", new()
         {
@@ -40,6 +54,7 @@ public static partial class PageForms
             ["Input.ConfirmPassword"] = Password,
         });
 
+    // LoginAsync: sign in through the real Login page.
     public static Task<HttpResponseMessage> LoginAsync(HttpClient browser, string email, string password) =>
         PostFormAsync(browser, "/Account/Login", "login", new()
         {
@@ -47,6 +62,7 @@ public static partial class PageForms
             ["Input.Password"] = password,
         });
 
+    // Link: finds the first http(s) URL in an email's text (used to follow confirmation and reset links).
     [GeneratedRegex(@"https?://\S+")]
     private static partial Regex Link();
 

@@ -1,17 +1,27 @@
+// =====================================================================================================
+// FILE: Maroos.Tests/Decks/DeckListParserTests.cs
+// PURPOSE: DeckListParser (Maroos.Core): reading Moxfield/Arena deck text - quantities, set codes,
+//   collector numbers, Sideboard/Commander sections, comments and junk lines.
+// Each test's name says what it proves; the '// TEST:' line above each one repeats it in plain words.
+// =====================================================================================================
+
 using Maroos.Core.Decks;
 
 namespace Maroos.Tests.Decks;
 
 public class DeckListParserTests
 {
+    // Helper: Single.
     private static DeckListLine Single(string text) => Assert.Single(DeckListParser.Parse(text).Lines);
 
+    // TEST: Parses plain lines.
     [Fact]
     public void Parses_plain_lines()
     {
         Assert.Equal(new DeckListLine(4, "Lightning Bolt", null, null, Board.Main), Single("4 Lightning Bolt"));
     }
 
+    // TEST: Accepts the x form and extra spaces.
     [Theory]
     [InlineData("4x Lightning Bolt")]
     [InlineData("4X Lightning Bolt")]
@@ -23,12 +33,14 @@ public class DeckListParserTests
         Assert.Equal("Lightning Bolt", line.Name);
     }
 
+    // TEST: Parses set code and collector number.
     [Fact]
     public void Parses_set_code_and_collector_number()
     {
         Assert.Equal(new DeckListLine(1, "Sol Ring", "c21", "263", Board.Main), Single("1 Sol Ring (C21) 263"));
     }
 
+    // TEST: Handles unusual collector numbers split cards and finish markers.
     [Theory]
     [InlineData("1 Sol Ring (PLST) C21-263", "plst", "C21-263")]
     [InlineData("1 Fire // Ice (MH2) 290", "mh2", "290")]
@@ -42,12 +54,14 @@ public class DeckListParserTests
         Assert.DoesNotContain("(", line.Name);
     }
 
+    // TEST: Keeps split card names whole.
     [Fact]
     public void Keeps_split_card_names_whole()
     {
         Assert.Equal("Fire // Ice", Single("2 Fire // Ice").Name);
     }
 
+    // TEST: Set code without collector number is kept.
     [Fact]
     public void Set_code_without_collector_number_is_kept()
     {
@@ -57,12 +71,14 @@ public class DeckListParserTests
         Assert.Null(line.CollectorNumber);
     }
 
+    // TEST: A line without a count means one copy.
     [Fact]
     public void A_line_without_a_count_means_one_copy()
     {
         Assert.Equal(new DeckListLine(1, "Sol Ring", null, null, Board.Main), Single("Sol Ring"));
     }
 
+    // TEST: Sideboard header switches board.
     [Theory]
     [InlineData("Sideboard")]
     [InlineData("SIDEBOARD:")]
@@ -75,6 +91,7 @@ public class DeckListParserTests
         Assert.Equal(new DeckListLine(2, "Pyroblast", null, null, Board.Side), lines[1]);
     }
 
+    // TEST: Arena style headers set commander main and sideboard.
     [Fact]
     public void Arena_style_headers_set_commander_main_and_sideboard()
     {
@@ -83,6 +100,7 @@ public class DeckListParserTests
         Assert.Equal([Board.Commander, Board.Main, Board.Side], lines.Select(l => l.Board));
     }
 
+    // TEST: Skips blank lines and comments and handles windows line endings.
     [Fact]
     public void Skips_blank_lines_and_comments_and_handles_windows_line_endings()
     {
@@ -91,6 +109,7 @@ public class DeckListParserTests
         Assert.Equal(["Lightning Bolt", "Mountain"], lines.Select(l => l.Name));
     }
 
+    // TEST: Ignores cards under maybeboard until the next board header.
     [Fact]
     public void Ignores_cards_under_maybeboard_until_the_next_board_header()
     {
@@ -99,6 +118,7 @@ public class DeckListParserTests
         Assert.Equal(["Lightning Bolt", "Pyroblast"], lines.Select(l => l.Name));
     }
 
+    // TEST: Reports lines it cannot use.
     [Theory]
     [InlineData("0 Lightning Bolt")]
     [InlineData("1000 Mountain")]
@@ -111,6 +131,7 @@ public class DeckListParserTests
         Assert.Equal([text], result.Unreadable);
     }
 
+    // TEST: Empty or null text gives nothing.
     [Fact]
     public void Empty_or_null_text_gives_nothing()
     {

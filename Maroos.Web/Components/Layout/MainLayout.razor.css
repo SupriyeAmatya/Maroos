@@ -1,19 +1,28 @@
+/* =====================================================================================================
+   FILE: Maroos.Web/Components/Layout/MainLayout.razor.css
+   PURPOSE: Layout of the page frame (scoped to MainLayout.razor): the top bar, then the page content,
+   then the footer, stacked in a column that fills at least the whole window.
+   ===================================================================================================== */
+/* The whole page: a column at least as tall as the window, so the footer sits at the bottom of short pages. */
 .page {
     display: flex;
     flex-direction: column;
     min-height: 100vh;
 }
 
+/* Everything under the top bar: the page content and the footer. */
 main {
     flex: 1;
     display: flex;
     flex-direction: column;
 }
 
+/* The page content takes the spare height, pushing the footer down. */
 article {
     flex: 1;
 }
 
+/* Wider screens: a little more space either side of the content and the footer. */
 @media (min-width: 641px) {
     article, .site-footer {
         padding-left: 2rem !important;
@@ -21,6 +30,7 @@ article {
     }
 }
 
+/* From the Blazor template: the yellow bar shown when an interactive page hits an unhandled error. */
 #blazor-error-ui {
     color-scheme: light only;
     background: lightyellow;

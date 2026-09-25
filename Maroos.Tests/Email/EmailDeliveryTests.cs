@@ -1,3 +1,9 @@
+// =====================================================================================================
+// FILE: Maroos.Tests/Email/EmailDeliveryTests.cs
+// PURPOSE: The sending machinery: settings binding, the wake-up signal, the outbox, and the
+// dispatcher (send, clear bodies, retry with backoff, give up, purge), on an in-memory database with a manual clock.
+// =====================================================================================================
+
 using System.Diagnostics;
 using Maroos.Core.Email;
 using Maroos.Tests.Scryfall;
@@ -10,6 +16,7 @@ namespace Maroos.Tests.Email;
 
 public class EmailOptionsTests
 {
+    // TEST: Settings bind from the email section.
     [Fact]
     public void Settings_bind_from_the_email_section()
     {
@@ -30,6 +37,7 @@ public class EmailOptionsTests
         Assert.Empty(options.MissingSettings());
     }
 
+    // TEST: Missing settings are named.
     [Fact]
     public void Missing_settings_are_named()
     {
@@ -43,6 +51,7 @@ public class EmailOptionsTests
 
 public class EmailSignalTests
 {
+    // TEST: A nudge ends the wait straight away.
     [Fact]
     public async Task A_nudge_ends_the_wait_straight_away()
     {
@@ -55,6 +64,7 @@ public class EmailSignalTests
         Assert.True(watch.Elapsed < TimeSpan.FromSeconds(5));
     }
 
+    // TEST: Without a nudge the wait ends after the timeout.
     [Fact]
     public async Task Without_a_nudge_the_wait_ends_after_the_timeout()
     {
@@ -73,6 +83,7 @@ public sealed class EmailDeliveryTests : IDisposable
     private readonly EmailOutbox _outbox;
     private readonly EmailDispatcher _dispatcher;
 
+    // A fresh database, outbox and dispatcher per test, sharing one signal as in Program.cs.
     public EmailDeliveryTests()
     {
         var signal = new EmailSignal();
@@ -82,15 +93,18 @@ public sealed class EmailDeliveryTests : IDisposable
 
     public void Dispose() => _db.Dispose();
 
+    // Message: a simple email to queue.
     private static EmailMessage Message(string to, string subject = "Hello") =>
         new(EmailKind.PasswordReset, to, new EmailContent(subject, "text body", "<p>html body</p>"));
 
+    // Row: the queued row for an address, read fresh from the database.
     private OutgoingEmail Row(string to)
     {
         using var db = _db.CreateDbContext();
         return db.OutgoingEmails.AsNoTracking().Single(e => e.ToAddress == to);
     }
 
+    // TEST: Queued emails are due straight away and long subjects are trimmed.
     [Fact]
     public async Task Queued_emails_are_due_straight_away_and_long_subjects_are_trimmed()
     {
@@ -103,6 +117,7 @@ public sealed class EmailDeliveryTests : IDisposable
         Assert.Null(row.SentAtUtc);
     }
 
+    // TEST: Auction links use the public address.
     [Fact]
     public void Auction_links_use_the_public_address()
     {
@@ -112,6 +127,7 @@ public sealed class EmailDeliveryTests : IDisposable
         Assert.Equal("https://maroos.test/Account/Manage", _outbox.SettingsUrl);
     }
 
+    // TEST: Due emails are sent and their bodies cleared.
     [Fact]
     public async Task Due_emails_are_sent_and_their_bodies_cleared()
     {
@@ -129,6 +145,7 @@ public sealed class EmailDeliveryTests : IDisposable
         Assert.Equal(0, await _dispatcher.SendDueAsync()); // nothing sent twice
     }
 
+    // TEST: A failing email is retried with backoff then given up.
     [Fact]
     public async Task A_failing_email_is_retried_with_backoff_then_given_up()
     {
@@ -158,6 +175,7 @@ public sealed class EmailDeliveryTests : IDisposable
         Assert.Empty(_transport.Sent);
     }
 
+    // TEST: One failing email does not hold up the others.
     [Fact]
     public async Task One_failing_email_does_not_hold_up_the_others()
     {
@@ -172,6 +190,7 @@ public sealed class EmailDeliveryTests : IDisposable
         Assert.Equal(1, Row("first@example.com").Attempts);
     }
 
+    // TEST: Sent emails are purged after seven days but unsent ones stay.
     [Fact]
     public async Task Sent_emails_are_purged_after_seven_days_but_unsent_ones_stay()
     {

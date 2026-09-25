@@ -1,3 +1,10 @@
+// =====================================================================================================
+// FILE: Maroos.Tests/Auth/LoginPageFlowTests.cs
+// PURPOSE: The real Register and Login pages over HTTP: registering needs a display name, a registered user
+//   can log in, wrong passwords fail.
+// Each test's name says what it proves; the '// TEST:' line above each one repeats it in plain words.
+// =====================================================================================================
+
 using System.Net;
 using static Maroos.Tests.Auth.PageForms;
 
@@ -13,8 +20,10 @@ public class LoginPageFlowTests : IClassFixture<MaroosWebFactory>, IAsyncLifetim
     public Task InitializeAsync() => _factory.InitializeDatabaseAsync();
     public Task DisposeAsync() => Task.CompletedTask;
 
+    // Helper: New browser.
     private HttpClient NewBrowser() => _factory.NewBrowser();
 
+    // Helper: Is signed in async.
     private static async Task<bool> IsSignedInAsync(HttpClient browser, string email)
     {
         var response = await browser.GetAsync("/profile");
@@ -22,6 +31,7 @@ public class LoginPageFlowTests : IClassFixture<MaroosWebFactory>, IAsyncLifetim
         return response.StatusCode == HttpStatusCode.OK && html.Contains($"Signed in as {email}");
     }
 
+    // TEST: Register logout and log back in through the pages.
     [Fact]
     public async Task Register_logout_and_log_back_in_through_the_pages()
     {
@@ -30,6 +40,7 @@ public class LoginPageFlowTests : IClassFixture<MaroosWebFactory>, IAsyncLifetim
 
         Assert.False(await IsSignedInAsync(browser, email));
 
+        // Register and confirm the email (new accounts must confirm before they can log in).
         (await _factory.RegisterAndConfirmAsync(browser, email)).EnsureSuccessStatusCode();
         Assert.True(await IsSignedInAsync(browser, email));
 
@@ -45,10 +56,12 @@ public class LoginPageFlowTests : IClassFixture<MaroosWebFactory>, IAsyncLifetim
         Assert.True(await IsSignedInAsync(browser, email));
     }
 
+    // TEST: Wrong password on login page shows error and stays signed out.
     [Fact]
     public async Task Wrong_password_on_login_page_shows_error_and_stays_signed_out()
     {
         var email = $"{Guid.NewGuid():N}@example.com";
+        // A confirmed account, so the wrong password (not confirmation) is what fails.
         (await _factory.RegisterAndConfirmAsync(NewBrowser(), email)).EnsureSuccessStatusCode();
 
         var browser = NewBrowser();

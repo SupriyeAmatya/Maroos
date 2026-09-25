@@ -1,3 +1,9 @@
+// =====================================================================================================
+// FILE: Maroos.Tests/Email/MailpitTests.cs
+// PURPOSE: One real email through a real SMTP server (Mailpit), read back through Mailpit's API.
+// Skipped unless MAROOS_TEST_SMTP_HOST, MAROOS_TEST_SMTP_PORT and MAROOS_TEST_MAILPIT_URL are set.
+// =====================================================================================================
+
 using System.Net.Http.Json;
 using System.Text.Json;
 using Maroos.Core.Email;
@@ -12,6 +18,7 @@ namespace Maroos.Tests.Email;
 /// </summary>
 public class MailpitTests
 {
+    // TEST: An email goes through smtp with its text and html parts.
     [SkippableFact]
     public async Task An_email_goes_through_smtp_with_its_text_and_html_parts()
     {

@@ -1,9 +1,17 @@
+// =====================================================================================================
+// FILE: Maroos.Tests/Decks/CardTypesTests.cs
+// PURPOSE: CardTypes (Maroos.Core): which group a card goes in (Creature, Instant, Land...) from its type
+//   line.
+// Each test's name says what it proves; the '// TEST:' line above each one repeats it in plain words.
+// =====================================================================================================
+
 using Maroos.Core.Decks;
 
 namespace Maroos.Tests.Decks;
 
 public class CardTypesTests
 {
+    // TEST: PrimaryType picks one group per card.
     [Theory]
     [InlineData("Instant", CardTypes.Instant)]
     [InlineData("Creature — Goblin", CardTypes.Creature)]
@@ -24,6 +32,7 @@ public class CardTypesTests
     public void PrimaryType_picks_one_group_per_card(string? typeLine, string expected) =>
         Assert.Equal(expected, CardTypes.PrimaryType(typeLine));
 
+    // TEST: GroupHeading pluralizes.
     [Theory]
     [InlineData(CardTypes.Creature, "Creatures")]
     [InlineData(CardTypes.Sorcery, "Sorceries")]

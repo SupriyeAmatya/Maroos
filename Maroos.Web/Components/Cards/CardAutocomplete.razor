@@ -1,3 +1,15 @@
+@* =====================================================================================================
+   FILE: Maroos.Web/Components/Cards/CardAutocomplete.razor
+   PURPOSE: The shared card-name box with suggestions — used on /search and in the deck page's "Add card".
+   HOW IT WORKS
+     1. Each keystroke restarts a 300 ms timer ("debounce"); only when typing pauses do we ask
+        CardService for suggestions (which caches them for 10 minutes).
+     2. Suggestions appear in a list under the box. ↑/↓ move the highlight, Enter picks it (or submits
+        the typed text), Escape closes the list, a mouse click picks one.
+     3. On submit the component calls the parent's OnSubmit with the text and whether it was a suggestion.
+   WHY CUSTOM: the browser's own <datalist> swallowed the Enter key in Chrome, so this was built instead.
+   ACCESSIBILITY: ARIA "combobox" pattern, so screen readers announce the list and the highlighted item.
+   ===================================================================================================== *@
 @* A text box with debounced Scryfall card-name suggestions. Arrow keys move through the list, Enter submits
    the highlighted suggestion (or the typed text), Escape closes the list. The parent decides what submit does. *@
 @implements IDisposable
@@ -6,6 +18,8 @@
 
 <div class="card-search-box">
     <div class="input-group">
+        @* The text box. @bind:event="oninput" updates `text` on every keystroke; @bind:after then runs OnTextChanged.
+           @onblur hides the list when focus leaves the box. *@
         <input class="form-control @InputClass" type="search" autocomplete="off"
                role="combobox" aria-autocomplete="list" aria-controls="@ListId"
                aria-expanded="@(ShowSuggestions ? "true" : "false")"
@@ -13,6 +27,7 @@
                aria-label="@AriaLabel" placeholder="@Placeholder" disabled="@Disabled"
                @bind="text" @bind:event="oninput" @bind:after="OnTextChanged"
                @onkeydown="OnKeyDown" @onblur="HideSuggestions" />
+        @* Anything the parent puts inside the component (e.g. the Main/Side board picker). *@
         @ChildContent
         <button class="btn btn-primary" type="button" disabled="@Disabled" @onclick="SubmitText">@ButtonText</button>
     </div>
@@ -21,7 +36,9 @@
         <ul id="@ListId" class="card-suggestions list-group shadow" role="listbox" aria-label="Card name suggestions">
             @for (var i = 0; i < suggestions.Count; i++)
             {
+                @* Copy the loop variable: the click lambda must capture this item's index, not the final `i`. *@
                 var index = i;
+                @* mousedown (not click) with preventDefault: picks the item before the box's blur hides the list. *@
                 <li id="@ListId-@index" role="option" aria-selected="@(index == highlighted ? "true" : "false")"
                     class="list-group-item list-group-item-action @(index == highlighted ? "active" : "")"
                     @onmousedown="() => SubmitSuggestion(suggestions[index])" @onmousedown:preventDefault>
@@ -33,6 +50,7 @@
 </div>
 
 @code {
+    // How long typing must pause before asking for suggestions.
     private static readonly TimeSpan AutocompleteDelay = TimeSpan.FromMilliseconds(300);
 
     /// <summary>Text to show in the box; applied whenever the parent passes a new value.</summary>
@@ -41,6 +59,7 @@
     /// <summary>Called with the text and whether it came from picking a suggestion (an exact card name).</summary>
     [Parameter] public EventCallback<CardAutocompleteSubmit> OnSubmit { get; set; }
 
+    // Cosmetic/behaviour parameters with sensible defaults. ListId must be unique if two boxes are on one page.
     [Parameter] public string Placeholder { get; set; } = "Card name";
     [Parameter] public string AriaLabel { get; set; } = "Card name";
     [Parameter] public string ButtonText { get; set; } = "Search";
@@ -51,15 +70,21 @@
     /// <summary>Extra controls placed between the text box and the button (e.g. a board picker).</summary>
     [Parameter] public RenderFragment? ChildContent { get; set; }
 
+    // text: what's in the box now. appliedText: the last Text parameter we copied in (to spot a new one).
     private string text = "";
     private string? appliedText;
+    // suggestions: the current list; highlighted: its selected index (-1 = none).
     private IReadOnlyList<string> suggestions = [];
     private int highlighted = -1;
+    // suggestionsOpen: whether the list should show (closed by Escape, blur or submit).
     private bool suggestionsOpen;
+    // typing: cancels the pending suggestion request when another key is pressed.
     private CancellationTokenSource? typing;
 
+    // The list shows only when open AND non-empty.
     private bool ShowSuggestions => suggestionsOpen && suggestions.Count > 0;
 
+    // OnParametersSet: the parent passed a new Text (e.g. after navigation) -> show it and reset the list.
     protected override void OnParametersSet()
     {
         if (Text != appliedText)
@@ -71,6 +96,7 @@
         }
     }
 
+    // Clear: lets the parent empty the box (e.g. after a card was added to a deck).
     public void Clear()
     {
         text = "";
@@ -79,6 +105,7 @@
         StateHasChanged();
     }
 
+    // OnTextChanged: the debounce. Wait 300 ms; if no newer keystroke cancelled us, fetch suggestions.
     private async Task OnTextChanged()
     {
         var token = RestartTyping();
@@ -93,28 +120,34 @@
         {
             // A newer keystroke (or a submit) replaced this one.
         }
+        // Scryfall unreachable: just show no suggestions (the box still works).
         catch (HttpRequestException)
         {
             suggestions = [];
         }
     }
 
+    // OnKeyDown: keyboard navigation. `case ... when` adds a condition to a case.
     private async Task OnKeyDown(KeyboardEventArgs e)
     {
         switch (e.Key)
         {
+            // Down: next item, wrapping to the top (% = remainder).
             case "ArrowDown" when ShowSuggestions:
                 highlighted = (highlighted + 1) % suggestions.Count;
                 break;
+            // Up: previous item, wrapping to the bottom.
             case "ArrowUp" when ShowSuggestions:
                 highlighted = highlighted <= 0 ? suggestions.Count - 1 : highlighted - 1;
                 break;
             case "Escape":
                 CloseSuggestions();
                 break;
+            // Enter with an item highlighted: pick it.
             case "Enter" when ShowSuggestions && highlighted >= 0:
                 await SubmitSuggestion(suggestions[highlighted]);
                 break;
+            // Enter otherwise: submit what was typed.
             case "Enter":
                 await SubmitText();
                 break;
@@ -123,14 +156,17 @@
 
     private void HideSuggestions() => suggestionsOpen = false;
 
+    // SubmitSuggestion: a picked suggestion is an exact Scryfall card name.
     private Task SubmitSuggestion(string name)
     {
         text = name;
         return SubmitAsync(new CardAutocompleteSubmit(name, IsSuggestion: true));
     }
 
+    // SubmitText: whatever was typed (may be partial — the parent decides, e.g. search runs a query).
     private Task SubmitText() => SubmitAsync(new CardAutocompleteSubmit(text.Trim(), IsSuggestion: false));
 
+    // SubmitAsync: ignore empty/disabled submits; cancel pending suggestions; tell the parent.
     private async Task SubmitAsync(CardAutocompleteSubmit submit)
     {
         if (Disabled || string.IsNullOrWhiteSpace(submit.Text))
@@ -141,6 +177,7 @@
         await OnSubmit.InvokeAsync(submit);
     }
 
+    // CloseSuggestions: empty and hide the list.
     private void CloseSuggestions()
     {
         suggestions = [];
@@ -157,6 +194,7 @@
         return typing.Token;
     }
 
+    // Dispose: cancel any pending request when the component is removed from the page.
     public void Dispose()
     {
         typing?.Cancel();

@@ -1,3 +1,10 @@
+// =====================================================================================================
+// FILE: Maroos.Tests/Auctions/WatchServiceTests.cs
+// PURPOSE: WatchService: toggle on/off, only visible things can be watched, decks that went private
+//   disappear, deleting a deck removes its watches.
+// Each test's name says what it proves; the '// TEST:' line above each one repeats it in plain words.
+// =====================================================================================================
+
 using Maroos.Core.Watchlist;
 
 namespace Maroos.Tests.Auctions;
@@ -16,6 +23,7 @@ public sealed class WatchServiceTests : IDisposable
 
     public void Dispose() => _world.Dispose();
 
+    // TEST: Toggling adds then removes a watch.
     [Fact]
     public async Task Toggling_adds_then_removes_a_watch()
     {
@@ -29,6 +37,7 @@ public sealed class WatchServiceTests : IDisposable
         Assert.False(await _world.Watches.IsWatchingAsync(_bob, WatchTarget.Auction, auction.Id));
     }
 
+    // TEST: You can watch public decks and your own but not someone elses private deck.
     [Fact]
     public async Task You_can_watch_public_decks_and_your_own_but_not_someone_elses_private_deck()
     {
@@ -41,6 +50,7 @@ public sealed class WatchServiceTests : IDisposable
         await Assert.ThrowsAsync<KeyNotFoundException>(() => _world.Watches.ToggleAsync(_bob, WatchTarget.Auction, Guid.NewGuid()));
     }
 
+    // TEST: The watchlist shows current prices and drops decks that went private or were deleted.
     [Fact]
     public async Task The_watchlist_shows_current_prices_and_drops_decks_that_went_private_or_were_deleted()
     {

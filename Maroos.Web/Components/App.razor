@@ -1,24 +1,39 @@
-﻿<!DOCTYPE html>
+﻿@* =====================================================================================================
+   FILE: Maroos.Web/Components/App.razor
+   PURPOSE: The root HTML document that every page is rendered into (<html>, <head>, <body>).
+   @Assets["..."] turns a file path into its fingerprinted URL (e.g. app.abc123.css) so browsers can
+   cache it forever and still get new versions after a deploy.
+   ===================================================================================================== *@
+<!DOCTYPE html>
 <html lang="en">
 
 <head>
     <meta charset="utf-8" />
+    @* Makes the layout work on phones (no zoomed-out desktop view). *@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    @* All relative links (href="decks") resolve from the site root. *@
     <base href="/" />
     <ResourcePreloader />
+    @* Styles: Bootstrap, the site's own app.css, then the per-component (scoped) CSS bundle. *@
     <link rel="stylesheet" href="@Assets["lib/bootstrap/dist/css/bootstrap.min.css"]" />
     <link rel="stylesheet" href="@Assets["app.css"]" />
     <link rel="stylesheet" href="@Assets["Maroos.Web.styles.css"]" />
     <ImportMap />
     <link rel="icon" type="image/png" href="favicon.png" />
+    @* The top bar's "always show labels" pin (wwwroot/nav.js). Loaded in <head>, so a pinned bar is drawn pinned from the start. *@
     <script src="@Assets["nav.js"]"></script>
+    @* HeadOutlet: where pages' <PageTitle> and <HeadContent> end up. *@
     <HeadOutlet />
 </head>
 
 <body>
+    @* Routes picks the page component for the current URL (see Routes.razor). *@
     <Routes />
+    @* Shown when the live (SignalR) connection to the server drops and Blazor is reconnecting. *@
     <ReconnectModal />
+    @* blazor.web.js starts Blazor in the browser (the Dockerfile checks this file is published). *@
     <script src="@Assets["_framework/blazor.web.js"]"></script>
+    @* Template script for passkey sign-in on the account pages. *@
     <script src="@Assets["Components/Account/Shared/PasskeySubmit.razor.js"]" type="module"></script>
 </body>
 

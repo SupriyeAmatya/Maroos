@@ -1,3 +1,10 @@
+// =====================================================================================================
+// FILE: Maroos.Tests/Decks/DeckServiceTests.cs
+// PURPOSE: DeckService: create/list/get, owner-only changes (DeckAccessException), add card, quantities,
+//   import (batched lookups, name fallback, replace keeps rows), delete removes watches.
+// Each test's name says what it proves; the '// TEST:' line above each one repeats it in plain words.
+// =====================================================================================================
+
 using Maroos.Core.Decks;
 using Maroos.Tests.Scryfall;
 using Maroos.Web.Data;
@@ -35,6 +42,7 @@ public sealed class DeckServiceTests : IDisposable
 
     public void Dispose() => _db.Dispose();
 
+    // Helper: Add user.
     private string AddUser(string email)
     {
         using var db = _db.CreateDbContext();
@@ -44,9 +52,11 @@ public sealed class DeckServiceTests : IDisposable
         return user.Id;
     }
 
+    // Helper: New deck async.
     private async Task<Guid> NewDeckAsync(string owner, bool isPublic = false) =>
         (await _decks.CreateAsync(owner, "Burn", "modern", isPublic)).Id;
 
+    // TEST: Import of a 60 card list survives a reload and exports the same list.
     [Fact]
     public async Task Import_of_a_60_card_list_survives_a_reload_and_exports_the_same_list()
     {
@@ -81,6 +91,7 @@ public sealed class DeckServiceTests : IDisposable
         Assert.Equal(view.Export(includePrintings: true), copy.Export(includePrintings: true));
     }
 
+    // TEST: Import uses the printing from the set code.
     [Fact]
     public async Task Import_uses_the_printing_from_the_set_code()
     {
@@ -94,6 +105,7 @@ public sealed class DeckServiceTests : IDisposable
         Assert.Equal("263", line.CollectorNumber);
     }
 
+    // TEST: Import falls back to the name when the printing does not exist.
     [Fact]
     public async Task Import_falls_back_to_the_name_when_the_printing_does_not_exist()
     {
@@ -106,6 +118,7 @@ public sealed class DeckServiceTests : IDisposable
         Assert.Equal(Fixtures.LightningBoltId, Assert.Single((await _decks.GetAsync(deckId, _alice))!.Entries).Line.ScryfallId);
     }
 
+    // TEST: Import reports unknown cards and unreadable lines but keeps the rest.
     [Fact]
     public async Task Import_reports_unknown_cards_and_unreadable_lines_but_keeps_the_rest()
     {
@@ -119,6 +132,7 @@ public sealed class DeckServiceTests : IDisposable
         Assert.Equal(4, (await _decks.GetAsync(deckId, _alice))!.Count(Board.Main));
     }
 
+    // TEST: Import merges repeated lines and adds to existing cards.
     [Fact]
     public async Task Import_merges_repeated_lines_and_adds_to_existing_cards()
     {
@@ -132,6 +146,7 @@ public sealed class DeckServiceTests : IDisposable
         Assert.Equal("Lightning Bolt", line.CardName);
     }
 
+    // TEST: Import with replace swaps the whole list.
     [Fact]
     public async Task Import_with_replace_swaps_the_whole_list()
     {
@@ -144,6 +159,7 @@ public sealed class DeckServiceTests : IDisposable
         Assert.Equal(["2 Lightning Bolt", "1 Sol Ring"], view.Export().ReplaceLineEndings("\n").Split('\n'));
     }
 
+    // TEST: AddCard adds by exact name and reports unknown names.
     [Fact]
     public async Task AddCard_adds_by_exact_name_and_reports_unknown_names()
     {
@@ -159,6 +175,7 @@ public sealed class DeckServiceTests : IDisposable
         Assert.Equal(3, view.Count(Board.Side));
     }
 
+    // TEST: AdjustQuantity changes counts and removes at zero.
     [Fact]
     public async Task AdjustQuantity_changes_counts_and_removes_at_zero()
     {
@@ -172,6 +189,7 @@ public sealed class DeckServiceTests : IDisposable
         Assert.Empty((await _decks.GetAsync(deckId, _alice))!.Entries);
     }
 
+    // TEST: Only the owner can change a deck.
     [Fact]
     public async Task Only_the_owner_can_change_a_deck()
     {
@@ -189,6 +207,7 @@ public sealed class DeckServiceTests : IDisposable
         Assert.Equal("4 Lightning Bolt", view.Export());
     }
 
+    // TEST: Private decks are visible only to their owner and public ones to everyone.
     [Fact]
     public async Task Private_decks_are_visible_only_to_their_owner_and_public_ones_to_everyone()
     {
@@ -206,6 +225,7 @@ public sealed class DeckServiceTests : IDisposable
         Assert.Null(await _decks.GetAsync(Guid.NewGuid(), _alice));
     }
 
+    // TEST: List shows only the owners decks with counts.
     [Fact]
     public async Task List_shows_only_the_owners_decks_with_counts()
     {
@@ -219,6 +239,7 @@ public sealed class DeckServiceTests : IDisposable
         Assert.Equal(3, summary.SideCount);
     }
 
+    // TEST: Settings rename change format and visibility.
     [Fact]
     public async Task Settings_rename_change_format_and_visibility()
     {
@@ -232,6 +253,7 @@ public sealed class DeckServiceTests : IDisposable
         Assert.True(deck.IsPublic);
     }
 
+    // TEST: Create rejects blank names and unknown formats.
     [Theory]
     [InlineData("   ", "modern")]
     [InlineData("Burn", "not-a-format")]
@@ -240,6 +262,7 @@ public sealed class DeckServiceTests : IDisposable
         await Assert.ThrowsAsync<ArgumentException>(() => _decks.CreateAsync(_alice, name, format));
     }
 
+    // TEST: Delete removes the deck and its cards.
     [Fact]
     public async Task Delete_removes_the_deck_and_its_cards()
     {

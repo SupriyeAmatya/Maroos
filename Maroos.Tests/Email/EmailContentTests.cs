@@ -1,9 +1,16 @@
+// =====================================================================================================
+// FILE: Maroos.Tests/Email/EmailContentTests.cs
+// PURPOSE: The pure email rules and text in Maroos.Core: the retry schedule, who gets an outbid
+// email, the wording of each email, and that names are escaped in the HTML part.
+// =====================================================================================================
+
 using Maroos.Core.Email;
 
 namespace Maroos.Tests.Email;
 
 public class EmailRulesTests
 {
+    // TEST: Failed sends are retried with growing delays.
     [Theory]
     [InlineData(1, 1)]
     [InlineData(2, 5)]
@@ -13,9 +20,11 @@ public class EmailRulesTests
     public void Failed_sends_are_retried_with_growing_delays(int failedAttempts, int minutes) =>
         Assert.Equal(TimeSpan.FromMinutes(minutes), EmailRetry.DelayAfter(failedAttempts));
 
+    // TEST: Sending gives up after six attempts.
     [Fact]
     public void Sending_gives_up_after_six_attempts() => Assert.Equal(6, EmailRetry.MaxAttempts);
 
+    // TEST: Outbid emails go to the previous high bidder if they want them.
     [Theory]
     [InlineData("alice", "bob", true, true)]
     [InlineData(null, "bob", true, false)]      // first bid: nobody was outbid
@@ -30,6 +39,7 @@ public class EmailContentTests
     private static readonly AuctionEmailInfo SolRing =
         new("Sol Ring", "Commander 2021", "https://maroos.test/auctions/abc", "https://maroos.test/Account/Manage");
 
+    // TEST: Outbid email gives the new price the minimum next bid and the links.
     [Fact]
     public void Outbid_email_gives_the_new_price_the_minimum_next_bid_and_the_links()
     {
@@ -44,6 +54,7 @@ public class EmailContentTests
         Assert.Contains("<a href=\"https://maroos.test/auctions/abc\">", email.HtmlBody);
     }
 
+    // TEST: Won email tells the winner how to reach the seller.
     [Fact]
     public void Won_email_tells_the_winner_how_to_reach_the_seller()
     {
@@ -55,6 +66,7 @@ public class EmailContentTests
         Assert.Contains("shark@example.com", email.TextBody);
     }
 
+    // TEST: Sold email tells the seller who won.
     [Fact]
     public void Sold_email_tells_the_seller_who_won()
     {
@@ -65,6 +77,7 @@ public class EmailContentTests
         Assert.Contains("bob@example.com", email.TextBody);
     }
 
+    // TEST: Unsold email says there were no bids.
     [Fact]
     public void Unsold_email_says_there_were_no_bids()
     {
@@ -74,6 +87,7 @@ public class EmailContentTests
         Assert.Contains("https://maroos.test/auctions/abc", email.TextBody);
     }
 
+    // TEST: Names are escaped in the html but kept as is in the text.
     [Fact]
     public void Names_are_escaped_in_the_html_but_kept_as_is_in_the_text()
     {
@@ -86,6 +100,7 @@ public class EmailContentTests
         Assert.Contains("<script>alert(1)</script>", email.TextBody);
     }
 
+    // TEST: Account emails put the raw link in the text and an encoded link in the html.
     [Fact]
     public void Account_emails_put_the_raw_link_in_the_text_and_an_encoded_link_in_the_html()
     {
@@ -97,6 +112,7 @@ public class EmailContentTests
         Assert.Contains("href=\"https://maroos.test/Account/ConfirmEmail?userId=1&amp;code=abc\"", email.HtmlBody);
     }
 
+    // TEST: Each account email has its own subject.
     [Fact]
     public void Each_account_email_has_its_own_subject()
     {

@@ -1,3 +1,10 @@
+// =====================================================================================================
+// FILE: Maroos.Tests/Auctions/AuctionLifecycleTests.cs
+// PURPOSE: End-to-end auction life on the services: list -> bid -> time passes -> the closer ends it ->
+//   winner, emails and profile tabs are right; cancel rules; the /auctions list shows current prices.
+// Each test's name says what it proves; the '// TEST:' line above each one repeats it in plain words.
+// =====================================================================================================
+
 using Maroos.Core.Auctions;
 using Maroos.Web.Services;
 using Microsoft.EntityFrameworkCore;
@@ -20,6 +27,7 @@ public sealed class AuctionLifecycleTests : IDisposable
 
     public void Dispose() => _world.Dispose();
 
+    // TEST: The list shows the high bid and filters and sorts by it.
     [Fact]
     public async Task The_list_shows_the_high_bid_and_filters_and_sorts_by_it()
     {
@@ -33,6 +41,7 @@ public sealed class AuctionLifecycleTests : IDisposable
         Assert.Equal([untouched.Id], (await _world.Auctions.ListAsync(new AuctionFilter(MaxCents: 1000))).Select(a => a.Id));
     }
 
+    // TEST: Auctions with bids cannot be cancelled.
     [Fact]
     public async Task Auctions_with_bids_cannot_be_cancelled()
     {
@@ -44,6 +53,7 @@ public sealed class AuctionLifecycleTests : IDisposable
         Assert.Equal("Someone has already bid, so this auction can't be cancelled.", error.Message);
     }
 
+    // TEST: The closer ends expired auctions records the winner and announces it.
     [Fact]
     public async Task The_closer_ends_expired_auctions_records_the_winner_and_announces_it()
     {
@@ -69,6 +79,7 @@ public sealed class AuctionLifecycleTests : IDisposable
         Assert.Equal(("Carol", (long?)700), (ended.WinnerName, ended.WinningCents));
     }
 
+    // TEST: An ended auction shows the winner right away even before the closer runs.
     [Fact]
     public async Task An_ended_auction_shows_the_winner_right_away_even_before_the_closer_runs()
     {
@@ -84,6 +95,7 @@ public sealed class AuctionLifecycleTests : IDisposable
         Assert.Equal(AuctionStatus.Active, view.Auction.Status); // not closed yet
     }
 
+    // TEST: Only the winner and the seller see each others email after the auction ends.
     [Fact]
     public async Task Only_the_winner_and_the_seller_see_each_others_email_after_the_auction_ends()
     {
@@ -105,6 +117,7 @@ public sealed class AuctionLifecycleTests : IDisposable
         Assert.Null((await _world.Auctions.GetAsync(auction.Id, null))!.ContactEmail);
     }
 
+    // TEST: Cancelled and unsold auctions have no winner or contact.
     [Fact]
     public async Task Cancelled_and_unsold_auctions_have_no_winner_or_contact()
     {
@@ -121,6 +134,7 @@ public sealed class AuctionLifecycleTests : IDisposable
         }
     }
 
+    // TEST: A seller sees all their listings with bids and buyers.
     [Fact]
     public async Task A_seller_sees_all_their_listings_with_bids_and_buyers()
     {

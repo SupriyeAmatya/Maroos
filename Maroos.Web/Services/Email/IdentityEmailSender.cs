@@ -1,3 +1,10 @@
+// =====================================================================================================
+// FILE: Maroos.Web/Services/Email/IdentityEmailSender.cs
+// PURPOSE: The bridge between ASP.NET Core Identity and the outbox. The account pages (Register, Resend
+// confirmation, Forgot password, Manage/Email) call these three methods; each queues the matching email.
+// Registered in Program.cs as IEmailSender<ApplicationUser>.
+// =====================================================================================================
+
 using System.Net;
 using Maroos.Core.Email;
 using Maroos.Web.Data;
@@ -11,6 +18,7 @@ namespace Maroos.Web.Services.Email;
 /// </summary>
 public sealed class IdentityEmailSender(EmailOutbox outbox) : IEmailSender<ApplicationUser>
 {
+    // SendConfirmationLinkAsync: a new account's confirmation, or a new address's confirmation.
     public Task SendConfirmationLinkAsync(ApplicationUser user, string email, string confirmationLink)
     {
         var link = WebUtility.HtmlDecode(confirmationLink);
@@ -21,10 +29,12 @@ public sealed class IdentityEmailSender(EmailOutbox outbox) : IEmailSender<Appli
             : new EmailMessage(EmailKind.ConfirmAccount, email, AccountEmailContent.ConfirmAccount(link), user.Id));
     }
 
+    // SendPasswordResetLinkAsync: the "Forgot your password?" email.
     public Task SendPasswordResetLinkAsync(ApplicationUser user, string email, string resetLink) =>
         outbox.QueueAsync(new EmailMessage(EmailKind.PasswordReset, email,
             AccountEmailContent.PasswordReset(WebUtility.HtmlDecode(resetLink)), user.Id));
 
+    // SendPasswordResetCodeAsync: the code-based reset used by Identity's API endpoints.
     public Task SendPasswordResetCodeAsync(ApplicationUser user, string email, string resetCode) =>
         outbox.QueueAsync(new EmailMessage(EmailKind.PasswordReset, email,
             AccountEmailContent.PasswordResetCode(resetCode), user.Id));

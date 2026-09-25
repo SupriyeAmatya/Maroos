@@ -1,3 +1,10 @@
+// =====================================================================================================
+// FILE: Maroos.Tests/Auctions/LiveBiddingPageTests.cs
+// PURPOSE: Phase 6 "done when": two users on the same auction page see each other's bids live, a too-low
+//   bid is rejected, and the page shows the winner the moment time runs out.
+// Each test's name says what it proves; the '// TEST:' line above each one repeats it in plain words.
+// =====================================================================================================
+
 using System.Security.Claims;
 using Bunit;
 using Maroos.Core.Auctions;
@@ -57,6 +64,7 @@ public sealed class LiveBiddingPageTests : IDisposable
         return browser;
     }
 
+    // Helper: Open.
     private IRenderedComponent<AuctionPage> Open(BunitContext browser, Guid auctionId)
     {
         var page = browser.Render<AuctionPage>(p => p.Add(a => a.Id, auctionId));
@@ -64,14 +72,17 @@ public sealed class LiveBiddingPageTests : IDisposable
         return page;
     }
 
+    // Helper: Bid.
     private static void Bid(IRenderedComponent<AuctionPage> page, string amount)
     {
         page.Find("#bid-amount").Change(amount);
         page.FindAll("button").Single(b => b.TextContent.Trim() == "Place bid").Click();
     }
 
+    // Helper: Message.
     private static string Message(IRenderedComponent<AuctionPage> page) => page.Find(".auction-message").TextContent.Trim();
 
+    // TEST: Two users see each others bids live.
     [Fact]
     public async Task Two_users_see_each_others_bids_live()
     {
@@ -97,6 +108,7 @@ public sealed class LiveBiddingPageTests : IDisposable
         Assert.Contains("Bob (you)", bobsPage.Find(".bid-history").TextContent);
     }
 
+    // TEST: A too low bid is rejected and nothing is saved.
     [Fact]
     public async Task A_too_low_bid_is_rejected_and_nothing_is_saved()
     {
@@ -111,6 +123,7 @@ public sealed class LiveBiddingPageTests : IDisposable
         Assert.Equal("0", page.Find(".auction-bid-count").TextContent);
     }
 
+    // TEST: The countdown ticks every second.
     [Fact]
     public async Task The_countdown_ticks_every_second()
     {
@@ -124,6 +137,7 @@ public sealed class LiveBiddingPageTests : IDisposable
         page.WaitForAssertion(() => Assert.Equal("23:59:55", page.Find(".auction-countdown").TextContent), TimeSpan.FromSeconds(5));
     }
 
+    // TEST: When time runs out the open page shows the winner and contact details.
     [Fact]
     public async Task When_time_runs_out_the_open_page_shows_the_winner_and_contact_details()
     {
@@ -147,6 +161,7 @@ public sealed class LiveBiddingPageTests : IDisposable
         Assert.DoesNotContain("@example.com", carolsPage.Markup);
     }
 
+    // TEST: Sellers and visitors get no bid form.
     [Fact]
     public async Task Sellers_and_visitors_get_no_bid_form()
     {
@@ -161,6 +176,7 @@ public sealed class LiveBiddingPageTests : IDisposable
         Assert.Empty(visitorsPage.FindAll("#bid-amount"));
     }
 
+    // TEST: Once someone bids the seller can no longer cancel.
     [Fact]
     public async Task Once_someone_bids_the_seller_can_no_longer_cancel()
     {
@@ -174,6 +190,7 @@ public sealed class LiveBiddingPageTests : IDisposable
         Assert.Contains("Auctions with bids can't be cancelled.", sellersPage.Markup);
     }
 
+    // TEST: The heart button toggles the watchlist.
     [Fact]
     public async Task The_heart_button_toggles_the_watchlist()
     {

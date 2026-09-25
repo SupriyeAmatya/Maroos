@@ -1,3 +1,12 @@
+// =====================================================================================================
+// FILE: Maroos.Tests/Deploy/ProductionStackTests.cs
+// PURPOSE: MigrationsAreCompleteTests (both migration sets match the model), PostgresTests (the real
+//   PostgreSQL migrations, bidding races and queries on a real server) and S3PhotoStorageTests (photos in a
+//   real S3 bucket). The last two SKIP unless MAROOS_TEST_POSTGRES / MAROOS_TEST_S3_* are set (see
+//   compose.yaml).
+// Each test's name says what it proves; the '// TEST:' line above each one repeats it in plain words.
+// =====================================================================================================
+
 using Maroos.Core.Decks;
 using Maroos.Core.Watchlist;
 using Maroos.Tests.Auctions;
@@ -17,6 +26,7 @@ namespace Maroos.Tests.Deploy;
 /// <summary>Both migration sets must match the model: a schema change without migrations for SQLite and PostgreSQL fails here.</summary>
 public class MigrationsAreCompleteTests
 {
+    // TEST: The sqlite migrations match the model.
     [Fact]
     public void The_sqlite_migrations_match_the_model()
     {
@@ -28,6 +38,7 @@ public class MigrationsAreCompleteTests
         Assert.False(db.Database.HasPendingModelChanges(), "Run: dotnet ef migrations add <Name> --context ApplicationDbContext --project Maroos.Web");
     }
 
+    // TEST: The postgres migrations match the model.
     [Fact]
     public void The_postgres_migrations_match_the_model()
     {
@@ -55,6 +66,7 @@ public sealed class PostgresTestDb : IDbContextFactory<ApplicationDbContext>, ID
     private readonly string _database = $"maroos_test_{Guid.NewGuid():N}";
     private readonly DbContextOptions<PostgresDbContext> _options;
 
+    // migrateTo: stop at this migration instead of the latest (the email migration test starts from an older schema).
     public PostgresTestDb(string? migrateTo = null)
     {
         var builder = new NpgsqlConnectionStringBuilder(ServerConnectionString) { Database = _database };
@@ -68,9 +80,11 @@ public sealed class PostgresTestDb : IDbContextFactory<ApplicationDbContext>, ID
             .Options;
 
         using var db = CreateDbContext();
+        // Apply the real migrations, up to migrateTo (or all of them).
         db.GetService<Microsoft.EntityFrameworkCore.Migrations.IMigrator>().Migrate(migrateTo);
     }
 
+    // Helper: Create db context.
     public ApplicationDbContext CreateDbContext() => new PostgresDbContext(_options);
 
     public void Dispose()
@@ -101,6 +115,7 @@ public sealed class PostgresTests : IDisposable
         }
     }
 
+    // TEST: Migrations apply and nothing is pending.
     [SkippableFact]
     public async Task Migrations_apply_and_nothing_is_pending()
     {
@@ -109,6 +124,7 @@ public sealed class PostgresTests : IDisposable
         Assert.Contains("20260923182618_InitialCreate", await db.Database.GetAppliedMigrationsAsync());
     }
 
+    // TEST: Decks import and load with card data.
     [SkippableFact]
     public async Task Decks_import_and_load_with_card_data()
     {
@@ -124,6 +140,7 @@ public sealed class PostgresTests : IDisposable
         Assert.Contains(view.Issues, i => i.CardName == "Sol Ring"); // not legal in Modern
     }
 
+    // TEST: Auctions bids and the closer work end to end.
     [SkippableFact]
     public async Task Auctions_bids_and_the_closer_work_end_to_end()
     {
@@ -147,6 +164,7 @@ public sealed class PostgresTests : IDisposable
         Assert.Equal("pg-seller@example.com", view.ContactEmail);
     }
 
+    // TEST: Parallel bids on postgres never break the rules.
     [SkippableFact]
     public async Task Parallel_bids_on_postgres_never_break_the_rules()
     {
@@ -165,6 +183,7 @@ public sealed class PostgresTests : IDisposable
             Assert.True(saved[i].AmountCents >= saved[i - 1].AmountCents + 100, $"bid {saved[i].AmountCents} accepted over {saved[i - 1].AmountCents}");
     }
 
+    // TEST: Watchlist works.
     [SkippableFact]
     public async Task Watchlist_works()
     {
@@ -183,6 +202,7 @@ public sealed class PostgresTests : IDisposable
 /// </summary>
 public class S3PhotoStorageTests
 {
+    // Helper: Options.
     private static S3PhotoOptions? Options()
     {
         var url = Environment.GetEnvironmentVariable("MAROOS_TEST_S3_URL");
@@ -199,6 +219,7 @@ public class S3PhotoStorageTests
         };
     }
 
+    // TEST: Photos round trip through the bucket.
     [SkippableFact]
     public async Task Photos_round_trip_through_the_bucket()
     {

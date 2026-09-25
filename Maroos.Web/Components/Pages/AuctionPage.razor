@@ -1,3 +1,23 @@
+@* =====================================================================================================
+   FILE: Maroos.Web/Components/Pages/AuctionPage.razor      URL: /auctions/{id}
+   PURPOSE: One auction, LIVE. Shows the photo(s), price, bid count, a countdown, condition, seller, the bid
+   box, bid history, and — after it ends — the result and (for the two people involved) contact emails.
+
+   WHAT THE VIEWER SEES IN THE BIDDING BOX (first matching rule wins)
+     cancelled                   -> "The seller cancelled this auction."
+     ended                       -> winner + price (or "no bids"); winner/seller also see each other's email
+     signed out                  -> "Log in to bid"
+     the seller                  -> "you can't bid on your own listing"
+     the current high bidder     -> "You're the highest bidder"
+     anyone else                 -> the bid box (pre-filled with the minimum next bid)
+
+   LIVE UPDATES
+     * Subscribes to AuctionEvents for this auction: when anyone bids (or the closer ends it), the page
+       reloads its data and shows "New bid ..." or "You've been outbid ...".
+     * A 1-second timer updates the countdown; the moment it reaches zero, the page reloads and shows the
+       winner without waiting for the AuctionCloser.
+     * Both start in OnAfterRender(firstRender) — i.e. only once the page is interactive — and stop in DisposeAsync.
+   ===================================================================================================== *@
 @page "/auctions/{Id:guid}"
 @rendermode InteractiveServer
 @implements IAsyncDisposable
@@ -8,6 +28,7 @@
 @inject TimeProvider Clock
 @inject ILogger<AuctionPage> Logger
 
+@* ---- Not loaded yet, or no such auction ---- *@
 @if (view is null)
 {
     <PageTitle>@(loading ? "Auction" : "Auction not found") · Maroos</PageTitle>
@@ -23,10 +44,12 @@
 }
 else
 {
+    @* A local shortcut for the markup below. *@
     var auction = view.Auction;
     <PageTitle>@auction.CardName auction · Maroos</PageTitle>
 
     <div class="auction-detail">
+        @* ---- Left: seller's photo (if any) and Scryfall's image of the printing ---- *@
         <div class="auction-detail-images">
             @if (auction.PhotoPath is { } photo)
             {
@@ -35,6 +58,7 @@ else
                     <figcaption class="small text-muted mt-1">Seller's photo</figcaption>
                 </figure>
             }
+            @* With a seller photo, the Scryfall image is shown smaller, as a reference. *@
             @if (view.Card?.FrontImage?.Normal is { } image)
             {
                 <figure class="mb-0 @(auction.PhotoPath is null ? "" : "auction-detail-reference")">
@@ -47,7 +71,9 @@ else
             }
         </div>
 
+        @* ---- Right: details, bidding, history ---- *@
         <div class="auction-detail-info">
+            @* Title (links to the card page), status badge, watch button. *@
             <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
                 <h1 class="mb-0 me-1"><a href="card/@auction.ScryfallId" class="text-reset text-decoration-none">@auction.CardName</a></h1>
                 <span class="badge auction-status @StatusBadgeClass">@StatusLabel</span>
@@ -57,7 +83,9 @@ else
                 @auction.SetName (@auction.SetCode.ToUpperInvariant()) #@auction.CollectorNumber
             </p>
 
+            @* Key facts as a definition list. *@
             <dl class="auction-facts">
+                @* Price label depends on state: Starting price / High bid / Final price. *@
                 <dt>@(view.BidCount == 0 ? "Starting price" : view.IsOpen ? "High bid" : "Final price")</dt>
                 <dd class="auction-price">@Money.FormatUsd(view.CurrentCents)</dd>
 
@@ -68,6 +96,8 @@ else
                 <dd>
                     @if (view.IsOpen)
                     {
+                        @* Countdown like "2d 04:13:09" (re-rendered every second). aria-live="off" so screen
+                           readers don't announce every tick. *@
                         <span class="auction-countdown" role="timer" aria-live="off">@AuctionRules.Countdown(now, auction.EndsAtUtc)</span>
                         <span class="text-muted"> · ends <time datetime="@auction.EndsAtUtc.ToString("o")">@auction.EndsAtUtc.ToString("MMM d, HH:mm") UTC</time></span>
                     }
@@ -83,6 +113,7 @@ else
                 <dt>Bid increment</dt>
                 <dd>@Money.FormatUsd(auction.IncrementCents)</dd>
 
+                @* Seller's public display name — never their email. *@
                 <dt>Seller</dt>
                 <dd>@view.SellerName@(view.IsSeller ? " (you)" : "")</dd>
             </dl>
@@ -92,6 +123,7 @@ else
                 <p class="small text-muted">Scryfall lists this printing at @Money.FormatUsd(market).</p>
             }
 
+            @* ---- The bidding box (see the rules table at the top of this file) ---- *@
             <section class="auction-action card card-body mb-3" aria-label="Bidding">
                 @if (auction.Status == AuctionStatus.Cancelled)
                 {
@@ -109,6 +141,7 @@ else
                             Won by <strong>@view.WinnerName</strong> for <strong>@Money.FormatUsd(view.CurrentCents)</strong>.
                         </p>
                     }
+                    @* ContactEmail is only set (by AuctionService) for the winner and the seller. *@
                     @if (view.ContactEmail is { } email)
                     {
                         <div class="alert alert-success mt-3 mb-0 auction-contact">
@@ -126,6 +159,7 @@ else
                 }
                 else if (userId is null)
                 {
+                    @* Login link that returns to this auction afterwards. *@
                     <p class="mb-0"><a href="@($"Account/Login?ReturnUrl={Uri.EscapeDataString($"/auctions/{Id}")}")">Log in</a> to bid.</p>
                 }
                 else if (view.IsSeller)
@@ -138,6 +172,7 @@ else
                 }
                 else
                 {
+                    @* The bid form. BiddingService re-checks everything; this is just the input. *@
                     <label for="bid-amount" class="form-label">Your bid <span class="text-muted">(at least @Money.FormatUsd(view.MinimumNextBid))</span></label>
                     <div class="input-group bid-input">
                         <span class="input-group-text">$</span>
@@ -147,6 +182,7 @@ else
                     <div class="form-text">Bids are binding: if you win, you agree to buy the card at your bid.</div>
                 }
 
+                @* Result/notification messages (bid accepted, outbid, errors), announced politely to screen readers. *@
                 <div role="status" aria-live="polite">
                     @if (message is not null)
                     {
@@ -155,6 +191,7 @@ else
                 </div>
             </section>
 
+            @* ---- Cancel (seller only, open, no bids), with a confirm step ---- *@
             @if (view.CanCancel)
             {
                 <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
@@ -175,6 +212,7 @@ else
                 <p class="small text-muted">Auctions with bids can't be cancelled.</p>
             }
 
+            @* ---- Bid history, highest first (public names; "(you)" marks your bids) ---- *@
             <section aria-labelledby="bid-history-heading">
                 <h2 id="bid-history-heading" class="h6">Bid history</h2>
                 @if (history.Count == 0)
@@ -200,24 +238,32 @@ else
 }
 
 @code {
+    // Id: from the URL.
     [Parameter] public Guid Id { get; set; }
 
+    // The signed-in user (if any).
     [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
 
+    // view: the auction as this viewer sees it; history: its bids.
     private AuctionView? view;
     private IReadOnlyList<BidLine> history = [];
+    // userId: null when signed out.
     private string? userId;
+    // UI state: first load, request running, cancel-confirm showing, message + whether it's a warning.
     private bool loading = true;
     private bool busy;
     private bool confirmingCancel;
     private string? message;
     private bool messageIsError;
+    // bidText: the bid box's text. now: the time the countdown is drawn for.
     private string bidText = "";
     private DateTime now;
 
+    // subscription: the live-event subscription; ticking: stops the 1-second timer.
     private IDisposable? subscription;
     private CancellationTokenSource? ticking;
 
+    // StatusLabel: "Cancelled", "Open" or "Ended" (`_ when` = a switch arm with a condition).
     private string StatusLabel => view!.Auction.Status switch
     {
         AuctionStatus.Cancelled => "Cancelled",
@@ -225,8 +271,10 @@ else
         _ => "Ended",
     };
 
+    // Green badge while open, grey otherwise.
     private string StatusBadgeClass => view!.IsOpen ? "text-bg-success" : "text-bg-secondary";
 
+    // OnParametersSetAsync: first load (and if the id changes).
     protected override async Task OnParametersSetAsync()
     {
         userId = (await AuthState).User.GetUserId();
@@ -241,9 +289,11 @@ else
             return;
         subscription = Events.Subscribe(Id, OnAuctionEventAsync);
         ticking = new CancellationTokenSource();
+        // `_ =` starts the timer loop without waiting for it (it runs until the page closes).
         _ = TickAsync(ticking.Token);
     }
 
+    // ReloadAsync: fetch fresh auction data and bid history.
     private async Task ReloadAsync()
     {
         now = Clock.GetUtcNow().UtcDateTime;
@@ -252,11 +302,14 @@ else
         history = view is null ? [] : await Bidding.HistoryAsync(Id, userId);
 
         // Keep what the bidder typed unless it's now below the minimum.
+        // (Pre-fill when the box is empty, or when the minimum changed and the typed value is now too low/unreadable.)
         if (view is not null && (bidText.Length == 0 || previousMinimum != view.MinimumNextBid
             && (!Money.TryParseUsd(bidText, out var typed) || typed < view.MinimumNextBid)))
             bidText = Money.FormatInput(view.MinimumNextBid);
     }
 
+    // TickAsync: the countdown loop. InvokeAsync runs the update on the component's own thread (required
+    // for anything that changes what's rendered from a background task).
     private async Task TickAsync(CancellationToken token)
     {
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1), Clock);
@@ -282,17 +335,20 @@ else
                 });
             }
         }
+        // The page was closed (DisposeAsync cancelled the token): just stop.
         catch (OperationCanceledException)
         {
         }
     }
 
+    // OnAuctionEventAsync: called by AuctionEvents when someone bids or the auction ends.
     private Task OnAuctionEventAsync(AuctionEvent auctionEvent) => InvokeAsync(async () =>
     {
         await ReloadAsync();
         // Your own bid already shows its own message; everyone else hears about the new bid.
         if (auctionEvent is BidPlaced bid && view?.HighBidderId != userId)
         {
+            // If this viewer had bid before, they've now been outbid (shown as a warning).
             var outbid = history.Any(h => h.IsViewer);
             (message, messageIsError) = outbid
                 ? ($"You've been outbid: {bid.BidderName} bid {Money.FormatUsd(bid.AmountCents)}.", true)
@@ -301,8 +357,10 @@ else
         StateHasChanged();
     });
 
+    // PlaceBidAsync: the "Place bid" button.
     private async Task PlaceBidAsync()
     {
+        // "12.50" -> 1250 cents.
         if (!Money.TryParseUsd(bidText, out var amount))
         {
             (message, messageIsError) = ("Enter your bid in dollars, like 12.50.", true);
@@ -312,6 +370,7 @@ else
         busy = true;
         try
         {
+            // BiddingService applies the rules inside its transaction and returns accepted/why not.
             var result = await Bidding.PlaceBidAsync(Id, userId!, amount);
             (message, messageIsError) = result.Accepted
                 ? ($"Your bid of {Money.FormatUsd(amount)} is the highest.", false)
@@ -324,6 +383,7 @@ else
         }
     }
 
+    // CancelAsync: the confirmed "Cancel auction" button (AuctionService re-checks seller/open/no bids).
     private async Task CancelAsync()
     {
         busy = true;
@@ -332,6 +392,7 @@ else
             await AuctionService.CancelAsync(Id, userId!);
             (message, messageIsError) = ("Auction cancelled.", false);
         }
+        // e.g. someone bid a moment ago: show why it couldn't be cancelled.
         catch (Exception ex) when (ex is AuctionAccessException or AuctionValidationException or KeyNotFoundException)
         {
             (message, messageIsError) = (ex.Message, true);
@@ -344,6 +405,7 @@ else
         }
     }
 
+    // DisposeAsync: the user left the page — stop listening for events and stop the timer.
     public ValueTask DisposeAsync()
     {
         subscription?.Dispose();

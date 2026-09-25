@@ -1,3 +1,10 @@
+@* =====================================================================================================
+   FILE: Maroos.Web/Components/Layout/NavMenu.razor
+   PURPOSE: The sticky navigation bar at the top of every page (rendered by MainLayout.razor).
+   Left: the "Maroos" name, then Home, Search, Decks, Auctions and Profile. Right: Account + Log out for
+   signed-in users, or Register + Log in for visitors, and the pin button.
+   Styles: NavMenu.razor.css (icons, hover labels, pinned mode, phone widths). Pin: wwwroot/nav.js.
+   ===================================================================================================== *@
 @* Top navigation bar. Icons only until you point at (or tab to) one, which shows its label below it; the pin
    (wwwroot/nav.js) keeps every label visible and remembers the choice in this browser. Labels are always in the
    page, so screen readers read them either way. *@
@@ -6,10 +13,13 @@
 
 @inject NavigationManager NavigationManager
 
+@* <header> + <nav aria-label="Main">: screen readers can jump straight to the main navigation. *@
 <header class="site-nav">
     <nav class="site-nav-inner" aria-label="Main">
         <a class="site-brand" href="">Maroos</a>
 
+        @* The main sections. Each link: an icon (hidden from screen readers) and its label.
+           NavLink adds the "active" class when the URL matches; Match.All = only the exact home URL. *@
         <ul class="nav-items">
             <li>
                 <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
@@ -38,8 +48,10 @@
             </li>
         </ul>
 
+        @* The right-hand group (pushed right by .nav-items-end). *@
         <ul class="nav-items nav-items-end">
             <AuthorizeView>
+                @* Signed in: account settings (hovering shows the login name as a tooltip) and Log out. *@
                 <Authorized>
                     <li>
                         <NavLink class="nav-link" href="Account/Manage" title="@context.User.Identity?.Name">
@@ -47,6 +59,7 @@
                         </NavLink>
                     </li>
                     <li>
+                        @* Log out is a POST with an antiforgery token (a plain link could be triggered by other sites). *@
                         <form action="Account/Logout" method="post">
                             <AntiforgeryToken />
                             <input type="hidden" name="ReturnUrl" value="@currentUrl" />
@@ -56,6 +69,7 @@
                         </form>
                     </li>
                 </Authorized>
+                @* Visitors: Register and Log in. *@
                 <NotAuthorized>
                     <li>
                         <NavLink class="nav-link" href="Account/Register">
@@ -69,6 +83,8 @@
                     </li>
                 </NotAuthorized>
             </AuthorizeView>
+            @* The pin: "Always show labels". data-nav-pin is how nav.js finds it; aria-pressed tells screen
+               readers whether it's on (nav.js keeps it in step with the saved choice). *@
             <li>
                 <button type="button" class="nav-link nav-pin" data-nav-pin aria-pressed="false">
                     <span class="nav-icon icon-pin" aria-hidden="true"></span><span class="nav-label">Always show labels</span>
@@ -79,20 +95,24 @@
 </header>
 
 @code {
+    // currentUrl: the page the user is on, so Log out can return them there.
     private string? currentUrl;
 
+    // OnInitialized: runs once when the component starts. Remember the URL and listen for navigation.
     protected override void OnInitialized()
     {
         currentUrl = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
         NavigationManager.LocationChanged += OnLocationChanged;
     }
 
+    // OnLocationChanged: keep currentUrl up to date and re-render.
     private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
     {
         currentUrl = NavigationManager.ToBaseRelativePath(e.Location);
         StateHasChanged();
     }
 
+    // Dispose: stop listening when the component goes away (avoids a memory leak).
     public void Dispose()
     {
         NavigationManager.LocationChanged -= OnLocationChanged;

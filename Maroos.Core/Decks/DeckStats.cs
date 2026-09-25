@@ -1,3 +1,17 @@
+// =====================================================================================================
+// FILE: Maroos.Core/Decks/DeckStats.cs
+// PURPOSE: Calculates the numbers shown in the deck's "Deck stats" panel:
+//   * Mana curve        — how many non-land cards cost 0, 1, 2, ... 6, and 7 or more mana
+//   * Colors            — cards per color and colored mana symbols ("pips") per color
+//   * Card types        — how many creatures, instants, lands...
+//   * Average mana value of non-land cards
+//   * Total price       — sum of quantity × USD price, plus how many copies have no price
+//
+// Curve, colors and types only count the cards you actually play (main deck + commander);
+// the sideboard is left out. The price includes every board.
+// Pure calculation: no database, no network — easy to unit-test.
+// =====================================================================================================
+
 using Maroos.Core.Scryfall;
 
 namespace Maroos.Core.Decks;
@@ -5,8 +19,10 @@ namespace Maroos.Core.Decks;
 /// <param name="Color">A WUBRG letter, or <c>C</c> for colorless.</param>
 /// <param name="Cards">Non-land cards of this color (a multicolor card counts for each of its colors).</param>
 /// <param name="Pips">Mana symbols of this color in those cards' costs (hybrid counts for both halves).</param>
+// ColorStat: one row of the Colors table in the stats panel.
 public sealed record ColorStat(string Color, int Cards, int Pips)
 {
+    // Name: "W" -> "White", etc.
     public string Name => DeckStats.ColorName(Color);
 }
 
@@ -14,22 +30,28 @@ public sealed record ColorStat(string Color, int Cards, int Pips)
 /// Numbers for the deck stats panel. Curve, colors and types cover the cards you play (main deck and
 /// commander); the price covers every board.
 /// </summary>
+// `required ... { get; init; }` properties must be set when the object is created and can't change after.
 public sealed class DeckStats
 {
     /// <summary>Mana value buckets: 0 through 6, then 7 and up.</summary>
+    // CurveLabels: the x-axis labels of the mana curve chart (8 buckets).
     public static readonly IReadOnlyList<string> CurveLabels = ["0", "1", "2", "3", "4", "5", "6", "7+"];
 
+    // ColorOrder: the traditional Magic color order W-U-B-R-G (white, blue, black, red, green).
     private static readonly string[] ColorOrder = ["W", "U", "B", "R", "G"];
 
     /// <summary>Non-land card counts per mana value bucket (see <see cref="CurveLabels"/>).</summary>
+    // ManaCurve[i] = number of non-land cards in bucket i (ManaCurve[7] = cost 7 or more).
     public required IReadOnlyList<int> ManaCurve { get; init; }
 
     /// <summary>WUBRG in order, then colorless; only colors that appear.</summary>
     public required IReadOnlyList<ColorStat> Colors { get; init; }
 
     /// <summary>Card counts by primary type in <see cref="CardTypes.DisplayOrder"/>; only types that appear.</summary>
+    // Types: pairs of (type name, count), e.g. ("Creature", 12).
     public required IReadOnlyList<KeyValuePair<string, int>> Types { get; init; }
 
+    // LandCount / NonLandCount: totals in the played boards.
     public required int LandCount { get; init; }
     public required int NonLandCount { get; init; }
 
@@ -37,29 +59,42 @@ public sealed class DeckStats
     public required decimal AverageManaValue { get; init; }
 
     /// <summary>Sum of quantity × USD price over every board.</summary>
+    // TotalPriceCents: in cents (long), never floating point.
     public required long TotalPriceCents { get; init; }
 
     /// <summary>Copies with no Scryfall USD price, left out of <see cref="TotalPriceCents"/>.</summary>
     public required int UnpricedCount { get; init; }
 
+    // Compute: deck entries -> all the stats above.
+    // PROCESS:
+    //   all    = every line with at least one copy
+    //   played = all except the sideboard (main + commander)
+    //   spells = played cards that aren't lands (the curve and colors only look at these)
     public static DeckStats Compute(IEnumerable<DeckEntry> entries)
     {
         var all = entries.Where(e => e.Line.Quantity > 0).ToList();
         var played = all.Where(e => e.Line.Board != Board.Side).ToList();
         var spells = played.Where(e => !e.IsLand).ToList();
 
+        // curve: one counter per bucket. Each card adds its quantity to the bucket for its mana value.
+        // Cards without Scryfall data are skipped (we don't know their cost).
         var curve = new int[CurveLabels.Count];
         foreach (var entry in spells.Where(e => e.Card is not null))
             curve[CurveBucket(entry.Card!.Cmc)] += entry.Line.Quantity;
 
+        // Average mana value = (sum of cost × copies) / number of copies, rounded to 2 decimals.
+        // withValue: spells we know the cost of; spellCount: how many copies that is.
         var withValue = spells.Where(e => e.Card is not null).ToList();
         var spellCount = withValue.Sum(e => e.Line.Quantity);
+        // Guard against dividing by zero for a deck with no spells.
         var average = spellCount == 0 ? 0m : decimal.Round(withValue.Sum(e => e.Card!.Cmc * e.Line.Quantity) / spellCount, 2);
 
+        // Build the result with an "object initializer" ({ Property = value, ... }).
         return new DeckStats
         {
             ManaCurve = curve,
             Colors = CountColors(spells),
+            // For each type in display order, add up the copies of that type; drop types with 0.
             Types = CardTypes.DisplayOrder
                 .Select(type => KeyValuePair.Create(type, played.Where(e => e.PrimaryType == type).Sum(e => e.Line.Quantity)))
                 .Where(kv => kv.Value > 0)
@@ -67,14 +102,19 @@ public sealed class DeckStats
             LandCount = played.Where(e => e.IsLand).Sum(e => e.Line.Quantity),
             NonLandCount = spells.Sum(e => e.Line.Quantity),
             AverageManaValue = average,
+            // Price × copies for every line (a missing price counts as 0 here)...
             TotalPriceCents = all.Sum(e => (e.Card?.DeckPriceCents ?? 0) * e.Line.Quantity),
+            // ...and the number of copies that had no price, so the panel can say so.
             UnpricedCount = all.Where(e => e.Card?.DeckPriceCents is null).Sum(e => e.Line.Quantity),
         };
     }
 
+    // CurveBucket: mana value -> bucket index 0..7.
+    // Floor rounds half-mana joke cards down (0.5 -> 0); Clamp puts 7, 8, 15... all into the last bucket "7+".
     public static int CurveBucket(decimal manaValue) =>
         Math.Clamp((int)Math.Floor(manaValue), 0, CurveLabels.Count - 1);
 
+    // ColorName: color letter -> English name. Anything else (including "C") is "Colorless".
     public static string ColorName(string color) => color switch
     {
         "W" => "White",
@@ -85,30 +125,38 @@ public sealed class DeckStats
         _ => "Colorless",
     };
 
+    // CountColors: builds the Colors table.
+    //   cards[c] — how many non-land cards are color c (a red-white card counts for both; no colors -> "C").
+    //   pips[c]  — how many mana symbols of color c appear in those cards' costs, times their quantity.
     private static List<ColorStat> CountColors(IEnumerable<DeckEntry> spells)
     {
+        // Start every counter at 0 for W, U, B, R, G and C.
         var cards = ColorOrder.Append("C").ToDictionary(c => c, _ => 0);
         var pips = ColorOrder.Append("C").ToDictionary(c => c, _ => 0);
 
         foreach (var entry in spells.Where(e => e.Card is not null))
         {
             var quantity = entry.Line.Quantity;
+            // The card's colors (front face for double-faced cards), keeping only letters we track.
             var colors = entry.Card!.FrontColors.Where(cards.ContainsKey).ToList();
             if (colors.Count == 0)
                 cards["C"] += quantity;
             foreach (var color in colors)
                 cards[color] += quantity;
 
+            // Walk the symbols of the mana cost, e.g. "{2}{R}{R}" -> "2", "R", "R".
             foreach (var symbol in ManaSymbols.Tokenize(entry.Card.FrontManaCost).Where(t => t.IsSymbol).Select(t => t.Text))
             {
                 // {W/U} counts for both; {2/W} and {W/P} count for W; {C} is a colorless pip. Generic {3} and {X} aren't pips.
                 if (symbol == "C")
                     pips["C"] += quantity;
+                // Split hybrid symbols on "/" and count each color letter found.
                 foreach (var color in ColorOrder.Where(c => symbol.Split('/').Contains(c)))
                     pips[color] += quantity;
             }
         }
 
+        // Only report colors that actually appear, in WUBRG order with colorless last.
         return ColorOrder.Append("C")
             .Where(c => cards[c] > 0 || pips[c] > 0)
             .Select(c => new ColorStat(c, cards[c], pips[c]))

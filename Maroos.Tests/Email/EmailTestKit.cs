@@ -1,3 +1,9 @@
+// =====================================================================================================
+// FILE: Maroos.Tests/Email/EmailTestKit.cs
+// PURPOSE: Shared email test helpers: a fake SMTP server that records what's sent (or fails on
+// purpose), and the email settings the tests use.
+// =====================================================================================================
+
 using Maroos.Core.Email;
 using Maroos.Web.Services.Email;
 
@@ -9,7 +15,9 @@ public sealed record SentEmail(EmailKind Kind, string To, string Subject, string
 /// <summary>A fake SMTP server: records every email, or fails the next <see cref="FailuresToSimulate"/> sends.</summary>
 public sealed class RecordingEmailTransport : IEmailTransport
 {
+    // Sent: every email "delivered", in order.
     public List<SentEmail> Sent { get; } = [];
+    // FailuresToSimulate: how many upcoming sends should throw, as if the server were down.
     public int FailuresToSimulate { get; set; }
 
     public Task SendAsync(OutgoingEmail email, CancellationToken ct = default)
@@ -25,6 +33,7 @@ public sealed class RecordingEmailTransport : IEmailTransport
     }
 }
 
+// TestEmail.Options: settings pointing at https://maroos.test, so tests can check the links in emails.
 public static class TestEmail
 {
     public static EmailOptions Options => new()

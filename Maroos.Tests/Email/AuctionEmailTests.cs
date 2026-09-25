@@ -1,3 +1,9 @@
+// =====================================================================================================
+// FILE: Maroos.Tests/Email/AuctionEmailTests.cs
+// PURPOSE: Outbid, won, sold and no-bids emails, queued by the real services over one database
+// (AuctionWorld): who gets what, the bidding war, the on/off switch, and that the dispatcher sends them.
+// =====================================================================================================
+
 using Maroos.Core.Email;
 using Maroos.Tests.Auctions;
 
@@ -10,8 +16,10 @@ public sealed class AuctionEmailTests : IDisposable
 
     public void Dispose() => _world.Dispose();
 
+    // Queued: every queued email of one kind.
     private List<OutgoingEmail> Queued(EmailKind kind) => _world.QueuedEmails().Where(e => e.Kind == kind).ToList();
 
+    // TEST: The previous high bidder is emailed when outbid.
     [Fact]
     public async Task The_previous_high_bidder_is_emailed_when_outbid()
     {
@@ -34,6 +42,7 @@ public sealed class AuctionEmailTests : IDisposable
         Assert.Contains($"https://maroos.test/auctions/{auction.Id}", email.TextBody);
     }
 
+    // TEST: In a bidding war each person gets one email each time they are outbid.
     [Fact]
     public async Task In_a_bidding_war_each_person_gets_one_email_each_time_they_are_outbid()
     {
@@ -52,6 +61,7 @@ public sealed class AuctionEmailTests : IDisposable
             Queued(EmailKind.Outbid).Select(e => e.ToAddress).Order());
     }
 
+    // TEST: People who turned auction emails off are not emailed when outbid.
     [Fact]
     public async Task People_who_turned_auction_emails_off_are_not_emailed_when_outbid()
     {
@@ -66,6 +76,7 @@ public sealed class AuctionEmailTests : IDisposable
         Assert.Empty(Queued(EmailKind.Outbid));
     }
 
+    // TEST: A rejected bid emails nobody.
     [Fact]
     public async Task A_rejected_bid_emails_nobody()
     {
@@ -81,6 +92,7 @@ public sealed class AuctionEmailTests : IDisposable
         Assert.Empty(Queued(EmailKind.Outbid));
     }
 
+    // TEST: Closing a sold auction emails the winner and the seller exactly once.
     [Fact]
     public async Task Closing_a_sold_auction_emails_the_winner_and_the_seller_exactly_once()
     {
@@ -108,6 +120,7 @@ public sealed class AuctionEmailTests : IDisposable
         Assert.Empty(Queued(EmailKind.AuctionUnsold));
     }
 
+    // TEST: An auction with no bids tells the seller.
     [Fact]
     public async Task An_auction_with_no_bids_tells_the_seller()
     {
@@ -124,6 +137,7 @@ public sealed class AuctionEmailTests : IDisposable
         Assert.Empty(Queued(EmailKind.AuctionSold));
     }
 
+    // TEST: Closing emails respect each persons switch.
     [Fact]
     public async Task Closing_emails_respect_each_persons_switch()
     {
@@ -139,6 +153,7 @@ public sealed class AuctionEmailTests : IDisposable
         Assert.Empty(Queued(EmailKind.AuctionSold));
     }
 
+    // TEST: Queued auction emails are sent by the dispatcher.
     [Fact]
     public async Task Queued_auction_emails_are_sent_by_the_dispatcher()
     {

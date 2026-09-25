@@ -1,12 +1,21 @@
+// =====================================================================================================
+// FILE: Maroos.Tests/Decks/DeckListWriterTests.cs
+// PURPOSE: DeckListWriter (Maroos.Core): writing a deck back to text, with or without printings, and that
+//   writing then parsing gives the same deck.
+// Each test's name says what it proves; the '// TEST:' line above each one repeats it in plain words.
+// =====================================================================================================
+
 using Maroos.Core.Decks;
 
 namespace Maroos.Tests.Decks;
 
 public class DeckListWriterTests
 {
+    // Helper: Card.
     private static DeckCard Card(int quantity, string name, Board board = Board.Main, string? set = null, string? number = null) =>
         new() { ScryfallId = Guid.NewGuid(), Quantity = quantity, CardName = name, Board = board, SetCode = set, CollectorNumber = number };
 
+    // TEST: Writes main then sideboard sorted by name.
     [Fact]
     public void Writes_main_then_sideboard_sorted_by_name()
     {
@@ -20,6 +29,7 @@ public class DeckListWriterTests
         Assert.Equal("4 Lightning Bolt\n20 Mountain\n\nSideboard\n2 Pyroblast", text.ReplaceLineEndings("\n"));
     }
 
+    // TEST: Writes commander and deck headers for commander decks.
     [Fact]
     public void Writes_commander_and_deck_headers_for_commander_decks()
     {
@@ -28,6 +38,7 @@ public class DeckListWriterTests
         Assert.Equal("Commander\n1 Krenko, Mob Boss\n\nDeck\n1 Sol Ring", text.ReplaceLineEndings("\n"));
     }
 
+    // TEST: Can include set codes.
     [Fact]
     public void Can_include_set_codes()
     {
@@ -36,6 +47,7 @@ public class DeckListWriterTests
         Assert.Equal("1 Sol Ring (C21) 263", text);
     }
 
+    // TEST: Output parses back to the same cards.
     [Fact]
     public void Output_parses_back_to_the_same_cards()
     {

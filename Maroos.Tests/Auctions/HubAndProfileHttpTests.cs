@@ -1,3 +1,10 @@
+// =====================================================================================================
+// FILE: Maroos.Tests/Auctions/HubAndProfileHttpTests.cs
+// PURPOSE: Over HTTP: the SignalR hub delivers BidPlaced/AuctionEnded to a real hub client; /profile needs
+//   login and shows each tab.
+// Each test's name says what it proves; the '// TEST:' line above each one repeats it in plain words.
+// =====================================================================================================
+
 using Maroos.Core.Auctions;
 using Maroos.Core.Watchlist;
 using Maroos.Tests.Auth;
@@ -21,13 +28,16 @@ public class HubAndProfileHttpTests : IClassFixture<MaroosWebFactory>, IAsyncLif
     public Task InitializeAsync() => _factory.InitializeDatabaseAsync();
     public Task DisposeAsync() => Task.CompletedTask;
 
+    // Helper: Register async.
     private async Task<(HttpClient Browser, string UserId)> RegisterAsync(string displayName) =>
         await RegisterWithEmailAsync(displayName) is var (browser, id, _) ? (browser, id) : default;
 
+    // Helper: Register with email async.
     private async Task<(HttpClient Browser, string UserId, string Email)> RegisterWithEmailAsync(string displayName)
     {
         var email = $"{Guid.NewGuid():N}@example.com";
         var browser = _factory.NewBrowser();
+        // Register, follow the confirmation link from the queued email, and log in.
         (await _factory.RegisterAndConfirmAsync(browser, email, displayName)).EnsureSuccessStatusCode();
         using var scope = _factory.Services.CreateScope();
         var user = await scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>().FindByEmailAsync(email);
@@ -40,10 +50,12 @@ public class HubAndProfileHttpTests : IClassFixture<MaroosWebFactory>, IAsyncLif
         return await use(scope.ServiceProvider.GetRequiredService<TService>());
     }
 
+    // Helper: List async.
     private Task<Auction> ListAsync(string sellerId) =>
         WithServiceAsync<AuctionService, Auction>(s => s.CreateAsync(sellerId,
             new NewAuction(Fixtures.SolRingC21Id, CardCondition.NearMint, false, 500, 100, 7)));
 
+    // Helper: Hub client.
     private HubConnection HubClient() =>
         new HubConnectionBuilder()
             .WithUrl(new Uri(_factory.Server.BaseAddress, AuctionHub.Path.TrimStart('/')), options =>
@@ -53,6 +65,7 @@ public class HubAndProfileHttpTests : IClassFixture<MaroosWebFactory>, IAsyncLif
             })
             .Build();
 
+    // TEST: Hub clients in an auctions group hear new bids and endings.
     [Fact]
     public async Task Hub_clients_in_an_auctions_group_hear_new_bids_and_endings()
     {
@@ -79,6 +92,7 @@ public class HubAndProfileHttpTests : IClassFixture<MaroosWebFactory>, IAsyncLif
         Assert.Equal(("Hub Bidder", (long?)750), await endHeard.Task.WaitAsync(TimeSpan.FromSeconds(10)));
     }
 
+    // TEST: Profile needs an account.
     [Fact]
     public async Task Profile_needs_an_account()
     {
@@ -87,6 +101,7 @@ public class HubAndProfileHttpTests : IClassFixture<MaroosWebFactory>, IAsyncLif
         Assert.Equal("/Account/Login", response.RequestMessage!.RequestUri!.AbsolutePath);
     }
 
+    // TEST: Profile tabs show decks listings bids and the watchlist.
     [Fact]
     public async Task Profile_tabs_show_decks_listings_bids_and_the_watchlist()
     {

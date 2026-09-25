@@ -1,3 +1,14 @@
+// =====================================================================================================
+// FILE: Maroos.Web/Services/Email/EmailDispatcher.cs
+// PURPOSE: The background sender. Runs for the app's whole life:
+//   1. send every due email (not sent yet, fewer than 6 attempts, next attempt time reached);
+//   2. on failure, schedule the next attempt per EmailRetry (1, 5, 15, 60, 180 minutes), or give up;
+//   3. about once an hour, delete emails sent more than 7 days ago;
+//   4. wait 5 seconds, or less if EmailSignal is nudged, and repeat.
+// Registered in Program.cs as a singleton and as a hosted service. Test hosts remove hosted services,
+// so tests call SendDueAsync() and PurgeSentAsync() themselves.
+// =====================================================================================================
+
 using Maroos.Core.Email;
 using Maroos.Web.Data;
 using Microsoft.EntityFrameworkCore;
@@ -15,13 +26,16 @@ public sealed class EmailDispatcher(
     TimeProvider clock,
     ILogger<EmailDispatcher> logger) : BackgroundService
 {
+    // How often to check, how long to keep sent emails, how often to clean up, how many to send per round.
     public static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(5);
     public static readonly TimeSpan KeepSentFor = TimeSpan.FromDays(7);
     private static readonly TimeSpan PurgeInterval = TimeSpan.FromHours(1);
     private const int BatchSize = 50;
 
+    // When the next clean-up is due (MinValue: at the first round).
     private DateTime _nextPurgeUtc = DateTime.MinValue;
 
+    // ExecuteAsync: the loop described above; stoppingToken is cancelled when the app shuts down.
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         while (!stoppingToken.IsCancellationRequested)
@@ -46,6 +60,7 @@ public sealed class EmailDispatcher(
                 logger.LogError(ex, "Sending queued emails failed");
             }
 
+            // Step 4: wait for the next round.
             await signal.WaitAsync(PollInterval, clock, stoppingToken);
         }
     }
@@ -55,6 +70,7 @@ public sealed class EmailDispatcher(
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         var now = clock.GetUtcNow().UtcDateTime;
+        // Up to 50 due emails, oldest first.
         var due = await db.OutgoingEmails
             .Where(e => e.SentAtUtc == null && e.Attempts < EmailRetry.MaxAttempts && e.NextAttemptAtUtc <= now)
             .OrderBy(e => e.CreatedAtUtc)
@@ -66,6 +82,7 @@ public sealed class EmailDispatcher(
         {
             try
             {
+                // Hand it to the mail server. Success: mark it sent and forget the body.
                 await transport.SendAsync(email, ct);
                 email.Attempts++;
                 email.SentAtUtc = clock.GetUtcNow().UtcDateTime;
@@ -74,10 +91,12 @@ public sealed class EmailDispatcher(
                 email.LastError = null;
                 sent++;
             }
+            // Failure (unless the app is shutting down): count it and keep the reason.
             catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
             {
                 email.Attempts++;
                 email.LastError = ex.Message.Length > OutgoingEmail.MaxErrorLength ? ex.Message[..OutgoingEmail.MaxErrorLength] : ex.Message;
+                // Out of attempts: give up (it stays in the table, unsent, with LastError). Otherwise try again later.
                 if (email.Attempts >= EmailRetry.MaxAttempts)
                 {
                     logger.LogError(ex, "Gave up sending {Kind} email {EmailId} after {Attempts} attempts", email.Kind, email.Id, email.Attempts);
@@ -100,6 +119,7 @@ public sealed class EmailDispatcher(
     public async Task<int> PurgeSentAsync(CancellationToken ct = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
+        // One DELETE statement for everything sent before the cutoff; unsent emails are never deleted here.
         var cutoff = clock.GetUtcNow().UtcDateTime - KeepSentFor;
         return await db.OutgoingEmails.Where(e => e.SentAtUtc != null && e.SentAtUtc < cutoff).ExecuteDeleteAsync(ct);
     }

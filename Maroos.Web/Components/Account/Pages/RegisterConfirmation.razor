@@ -1,4 +1,12 @@
-﻿@page "/Account/RegisterConfirmation"
+@* =====================================================================================================
+   FILE: Maroos.Web/Components/Account/Pages/RegisterConfirmation.razor      URL: /Account/RegisterConfirmation
+   ORIGIN: the Blazor Identity template's page, rewritten for Maroos.
+   PURPOSE: Where the Register page sends a new user: "Check your email". New accounts must click the
+   confirmation link (queued by IdentityEmailSender) before they can log in.
+   The template's version showed the confirmation link on the page when no email sender existed; with
+   real email that shortcut is gone.
+   ===================================================================================================== *@
+@page "/Account/RegisterConfirmation"
 
 @using Microsoft.AspNetCore.Identity
 @using Maroos.Web.Data
@@ -10,31 +18,38 @@
 
 <h1>Check your email</h1>
 
+@* Shows an error only when no account has that email (statusMessage below). *@
 <StatusMessage Message="@statusMessage" />
 
 @if (statusMessage is null)
 {
+    @* The address comes from the query string; Razor HTML-encodes it, so it can't inject markup. *@
     <p role="alert">We've sent a confirmation link to <strong>@Email</strong>. Click it to finish creating your account, then log in.</p>
     <p>Didn't get it? Check your spam folder, or <a href="Account/ResendEmailConfirmation">send it again</a>.</p>
 }
 
 @code {
+    // statusMessage: an error to show instead of the instructions (null when all is well).
     private string? statusMessage;
 
+    // The current HTTP request (this page renders on the server).
     [CascadingParameter]
     private HttpContext HttpContext { get; set; } = default!;
 
+    // Email: the address just registered (?email=...).
     [SupplyParameterFromQuery]
     private string? Email { get; set; }
 
     protected override async Task OnInitializedAsync()
     {
+        // Reached without an email: nothing to confirm, go home.
         if (Email is null)
         {
             RedirectManager.RedirectTo("");
             return;
         }
 
+        // Unknown address: answer 404 with an error message.
         if (await UserManager.FindByEmailAsync(Email) is null)
         {
             HttpContext.Response.StatusCode = StatusCodes.Status404NotFound;

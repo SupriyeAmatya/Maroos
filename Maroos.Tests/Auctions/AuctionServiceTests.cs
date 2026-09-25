@@ -1,3 +1,10 @@
+// =====================================================================================================
+// FILE: Maroos.Tests/Auctions/AuctionServiceTests.cs
+// PURPOSE: AuctionService: create from Scryfall data, list/filter/sort open auctions, set filter options,
+//   get with seller name, cancel rules.
+// Each test's name says what it proves; the '// TEST:' line above each one repeats it in plain words.
+// =====================================================================================================
+
 using Maroos.Core.Auctions;
 using Maroos.Tests.Email;
 using Maroos.Tests.Scryfall;
@@ -20,6 +27,7 @@ public sealed class AuctionServiceTests : IDisposable
     public AuctionServiceTests()
     {
         var cards = new CardService(FakeScryfallHandler.WithFixtures().CreateClient(), _db, new MemoryCache(new MemoryCacheOptions()), _clock);
+        // With a real outbox, so closing an auction can queue its emails.
         _auctions = new AuctionService(_db, cards, new AuctionEvents(NullLogger<AuctionEvents>.Instance),
             new EmailOutbox(_db, TestEmail.Options, new EmailSignal(), _clock), _clock);
         _seller = AddUser("seller@example.com", "Card Shark");
@@ -28,6 +36,7 @@ public sealed class AuctionServiceTests : IDisposable
 
     public void Dispose() => _db.Dispose();
 
+    // Helper: Add user.
     private string AddUser(string email, string? displayName)
     {
         using var db = _db.CreateDbContext();
@@ -37,9 +46,11 @@ public sealed class AuctionServiceTests : IDisposable
         return user.Id;
     }
 
+    // Helper: List async.
     private Task<Auction> ListAsync(Guid? card = null, long start = 500, int days = 7, string? seller = null, CardCondition condition = CardCondition.NearMint) =>
         _auctions.CreateAsync(seller ?? _seller, new NewAuction(card ?? Fixtures.LightningBoltId, condition, false, start, 100, days));
 
+    // TEST: Create fills in the card from scryfall and ends after the duration.
     [Fact]
     public async Task Create_fills_in_the_card_from_scryfall_and_ends_after_the_duration()
     {
@@ -59,6 +70,7 @@ public sealed class AuctionServiceTests : IDisposable
         Assert.Equal("uploads/photo.jpg", view.Auction.PhotoPath);
     }
 
+    // TEST: Create rejects invalid listings and unknown cards.
     [Fact]
     public async Task Create_rejects_invalid_listings_and_unknown_cards()
     {
@@ -72,6 +84,7 @@ public sealed class AuctionServiceTests : IDisposable
         Assert.Empty(db.Auctions);
     }
 
+    // TEST: List shows open auctions ending soonest first.
     [Fact]
     public async Task List_shows_open_auctions_ending_soonest_first()
     {
@@ -86,6 +99,7 @@ public sealed class AuctionServiceTests : IDisposable
         Assert.All(listed, a => Assert.NotNull(a.ImageUrl));
     }
 
+    // TEST: List leaves out auctions past their end time.
     [Fact]
     public async Task List_leaves_out_auctions_past_their_end_time()
     {
@@ -97,6 +111,7 @@ public sealed class AuctionServiceTests : IDisposable
         Assert.Equal([stillOpen.Id], (await _auctions.ListAsync(new AuctionFilter())).Select(a => a.Id));
     }
 
+    // TEST: List filters by name set and max price and sorts by price.
     [Fact]
     public async Task List_filters_by_name_set_and_max_price_and_sorts_by_price()
     {
@@ -113,6 +128,7 @@ public sealed class AuctionServiceTests : IDisposable
         Assert.Equal(2, sets.Single(s => s.Code != "c21").Count);
     }
 
+    // TEST: Seller photo is shown in the list instead of the scryfall image.
     [Fact]
     public async Task Seller_photo_is_shown_in_the_list_instead_of_the_scryfall_image()
     {
@@ -121,6 +137,7 @@ public sealed class AuctionServiceTests : IDisposable
         Assert.Equal("uploads/mine.jpg", Assert.Single(await _auctions.ListAsync(new AuctionFilter())).ImageUrl);
     }
 
+    // TEST: Get shows the sellers display name never their email.
     [Fact]
     public async Task Get_shows_the_sellers_display_name_never_their_email()
     {
@@ -141,6 +158,7 @@ public sealed class AuctionServiceTests : IDisposable
         Assert.Null(await _auctions.GetAsync(Guid.NewGuid(), _seller));
     }
 
+    // TEST: Only the seller can cancel and only while open.
     [Fact]
     public async Task Only_the_seller_can_cancel_and_only_while_open()
     {
@@ -161,5 +179,6 @@ public sealed class AuctionServiceTests : IDisposable
         Assert.Equal("This auction has already ended.", error.Message);
     }
 
+    // Helper: Ids.
     private static List<Guid> Ids(IEnumerable<AuctionSummary> auctions) => auctions.Select(a => a.Id).ToList();
 }

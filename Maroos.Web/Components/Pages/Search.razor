@@ -1,14 +1,26 @@
+@* =====================================================================================================
+   FILE: Maroos.Web/Components/Pages/Search.razor      URL: /search?q=...&page=N
+   PURPOSE: Card search. Accepts a card name or full Scryfall search syntax ("t:dragon c:r cmc<=4") and shows
+   a grid of card images, 175 per page, with Previous/Next.
+   BEHAVIOUR
+     * The query lives in the URL (?q=), so searches can be bookmarked and Back works.
+     * Picking an autocomplete suggestion searches for that exact name (!"Name"), which usually has one
+       result — and a single result jumps straight to the card page, like Scryfall does.
+   RENDERING: InteractiveServer (the autocomplete needs live keystroke handling).
+   ===================================================================================================== *@
 @page "/search"
 @rendermode InteractiveServer
 
 @inject CardService Cards
 @inject NavigationManager Navigation
 
+@* Tab title: "lightning bolt – Search · Maroos", or just "Search · Maroos". *@
 <PageTitle>@(string.IsNullOrWhiteSpace(Q) ? "Search" : $"{Q} – Search") · Maroos</PageTitle>
 
 <h1>Card search</h1>
 
 <div class="card-search mb-3" role="search">
+    @* The shared autocomplete box; OnSearch runs when the user submits. *@
     <CardAutocomplete Text="@Q" OnSubmit="OnSearch" InputClass="form-control-lg" ButtonText="Search"
                       AriaLabel="Card name or Scryfall query"
                       Placeholder="Card name or Scryfall query, e.g. lightning bolt or t:dragon c:r" />
@@ -17,6 +29,7 @@
     </div>
 </div>
 
+@* Four states: error, loading, results (maybe none), or nothing searched yet. *@
 @if (error is not null)
 {
     <div class="alert alert-warning">@error</div>
@@ -33,8 +46,10 @@ else if (results is not null)
     }
     else
     {
+        @* Result count with thousands separator ("1,234 cards"). *@
         <p class="text-muted">@results.TotalCards.ToString("N0") card@(results.TotalCards == 1 ? "" : "s")</p>
 
+        @* The grid: each image links to the card page. loading="lazy" loads images as they scroll into view. *@
         <div class="card-grid">
             @foreach (var card in results.Data)
             {
@@ -51,6 +66,7 @@ else if (results is not null)
             }
         </div>
 
+        @* Paging links (only when there's more than one page). *@
         @if (PageNumber > 1 || results.HasMore)
         {
             <nav class="d-flex gap-2 justify-content-center my-4" aria-label="Search pages">
@@ -69,15 +85,19 @@ else if (results is not null)
 }
 
 @code {
+    // Values read from the URL's query string: ?q=...&page=...
     [SupplyParameterFromQuery] public string? Q { get; set; }
     [SupplyParameterFromQuery(Name = "page")] public int? PageParam { get; set; }
 
+    // PageNumber: the page, never below 1 (a bad ?page= value can't break the search).
     private int PageNumber => Math.Max(1, PageParam ?? 1);
 
+    // results: the current page of cards (null = nothing searched). loading / error: UI state.
     private ScryfallList<ScryfallCard>? results;
     private bool loading;
     private string? error;
 
+    // OnParametersSetAsync: runs whenever the URL's q/page change — run the search.
     protected override async Task OnParametersSetAsync()
     {
         error = null;
@@ -90,6 +110,7 @@ else if (results is not null)
         {
             results = await Cards.SearchAsync(Q, PageNumber);
         }
+        // Scryfall rejects bad syntax (or is unreachable): show a friendly message.
         catch (HttpRequestException)
         {
             error = "Scryfall couldn't run that search. Check the query syntax or try again in a moment.";
@@ -101,11 +122,14 @@ else if (results is not null)
 
         // Like Scryfall: a search with a single match goes straight to the card. Replace the history
         // entry so Back doesn't bounce the user into the same redirect.
+        // (`Data: [var only]` is a list pattern: "exactly one item, call it only".)
         if (results is { TotalCards: 1, Data: [var only] })
             Navigation.NavigateTo($"card/{only.Id}", replace: true);
     }
 
     /// <summary>A picked suggestion searches for that exact name, which lands on the card page.</summary>
+    // OnSearch: put the query in the URL; OnParametersSetAsync then runs the search.
+    // (!"Name" is Scryfall's exact-name syntax.)
     private void OnSearch(CardAutocompleteSubmit submit)
     {
         var query = submit.IsSuggestion ? $"!\"{submit.Text}\"" : submit.Text;
@@ -114,6 +138,7 @@ else if (results is not null)
             Navigation.NavigateTo(url);
     }
 
+    // PageUrl: the current URL with a different page number.
     private string PageUrl(int page) =>
         Navigation.GetUriWithQueryParameters(new Dictionary<string, object?> { ["q"] = Q, ["page"] = page });
 }

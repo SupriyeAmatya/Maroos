@@ -1,3 +1,10 @@
+// =====================================================================================================
+// FILE: Maroos.Tests/Decks/DeckStatsPanelTests.cs
+// PURPOSE: bUnit tests of DeckStatsPanel.razor: the SVG bars, the screen-reader table, colors/types/price,
+//   and invariant-culture numbers in the SVG.
+// Each test's name says what it proves; the '// TEST:' line above each one repeats it in plain words.
+// =====================================================================================================
+
 using System.Globalization;
 using Bunit;
 using Maroos.Core.Decks;
@@ -8,6 +15,7 @@ namespace Maroos.Tests.Decks;
 
 public sealed class DeckStatsPanelTests : BunitContext
 {
+    // Helper: Sample stats.
     private static DeckStats SampleStats() => DeckStats.Compute(
     [
         Entry(4, Card("Lightning Bolt", cmc: 1, usd: "0.72")),
@@ -16,6 +24,7 @@ public sealed class DeckStatsPanelTests : BunitContext
         Entry(20, Land()),
     ]);
 
+    // TEST: Renders one bar group per mana value with the right counts.
     [Fact]
     public void Renders_one_bar_group_per_mana_value_with_the_right_counts()
     {
@@ -30,6 +39,7 @@ public sealed class DeckStatsPanelTests : BunitContext
         Assert.Equal("Mana value 7+: 3 cards", bars[7].QuerySelector("title")!.TextContent);
     }
 
+    // TEST: Bar heights are proportional to the counts.
     [Fact]
     public void Bar_heights_are_proportional_to_the_counts()
     {
@@ -41,6 +51,7 @@ public sealed class DeckStatsPanelTests : BunitContext
         Assert.Equal(Height(1) * 3 / 4, Height(7), precision: 1);
     }
 
+    // TEST: Shows colors types and the total price.
     [Fact]
     public void Shows_colors_types_and_the_total_price()
     {
@@ -52,6 +63,7 @@ public sealed class DeckStatsPanelTests : BunitContext
         Assert.Equal("$66.88", panel.Find(".deck-price").TextContent);
     }
 
+    // TEST: Chart coordinates use invariant numbers in any culture.
     [Fact]
     public void Chart_coordinates_use_invariant_numbers_in_any_culture()
     {

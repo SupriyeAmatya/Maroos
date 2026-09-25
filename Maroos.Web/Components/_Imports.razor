@@ -1,12 +1,20 @@
-﻿@using System.Net.Http
+﻿@* =====================================================================================================
+   FILE: Maroos.Web/Components/_Imports.razor
+   PURPOSE: @using lines here apply to EVERY .razor file in this folder and below, so pages can use
+   types like CardService, Deck, Auction or Money without their own @using lines.
+   ===================================================================================================== *@
+@* Framework namespaces (from the Blazor template). *@
+@using System.Net.Http
 @using System.Net.Http.Json
 @using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.AspNetCore.Components.Forms
 @using Microsoft.AspNetCore.Components.Routing
 @using Microsoft.AspNetCore.Components.Web
+@* `static RenderMode` lets pages write @rendermode InteractiveServer. *@
 @using static Microsoft.AspNetCore.Components.Web.RenderMode
 @using Microsoft.AspNetCore.Components.Web.Virtualization
 @using Microsoft.JSInterop
+@* Maroos namespaces, added phase by phase. *@
 @using Maroos.Web
 @using Maroos.Web.Components
 @using Maroos.Web.Components.Layout

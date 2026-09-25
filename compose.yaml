@@ -1,3 +1,13 @@
+# =====================================================================================================
+# FILE: compose.yaml
+# PURPOSE: Runs the whole production setup locally with one command, as five containers:
+#   db         — PostgreSQL 17 (the production database engine), on localhost:5433
+#   s3         — Versity S3 Gateway: an S3-compatible object store for photos, on localhost:9000
+#   s3-bucket  — a one-off AWS CLI container that creates the "maroos-photos" bucket, then exits
+#   mailpit    — a local test inbox: catches every email the app sends (SMTP 1025, inbox http://localhost:8025)
+#   web        — the Maroos image built from the Dockerfile, on http://localhost:8080
+# (MinIO was the first choice for S3, but its images are no longer published on Docker Hub.)
+# =====================================================================================================
 # A production-like Maroos on your machine: PostgreSQL, an S3-compatible bucket (Versity S3 Gateway) and the app image.
 #
 #   docker compose up --build        then open http://localhost:8080
@@ -17,15 +27,19 @@
 # These passwords are for local testing only.
 
 services:
+  # ---- PostgreSQL ----
   db:
     image: postgres:17
     environment:
       POSTGRES_PASSWORD: maroos-local
       POSTGRES_DB: maroos
+    # host port 5433 -> container port 5432 (5433 avoids clashing with a Postgres already installed locally).
     ports:
       - "5433:5432"
+    # A named volume keeps the data between restarts.
     volumes:
       - db-data:/var/lib/postgresql/data
+    # "healthy" once Postgres accepts connections; the web app waits for this.
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 2s
@@ -35,12 +49,14 @@ services:
   # Any S3-compatible server works; Versity's gateway (Apache 2.0) stores objects in a local folder.
   s3:
     image: versity/versitygw:v1.8.0
+    # Access key / secret, port, and the "posix" backend (objects are files under /data).
     command: ["--access", "maroos", "--secret", "maroos-local-secret", "--port", ":9000", "posix", "/data"]
     ports:
       - "9000:9000"
     volumes:
       - s3-data:/data
 
+  # ---- Creates the bucket (retrying for up to 30 s while the gateway starts), then exits with success ----
   s3-bucket:
     image: amazon/aws-cli:2.31.1
     depends_on:
@@ -50,6 +66,7 @@ services:
       AWS_SECRET_ACCESS_KEY: maroos-local-secret
       AWS_DEFAULT_REGION: us-east-1
     entrypoint: ["sh", "-c"]
+    # ($$ escapes $ in compose files. Loop: bucket exists -> done; else try to create it; else wait 1 s.)
     command:
       - >-
         for i in $$(seq 1 30); do
@@ -57,6 +74,7 @@ services:
         aws --endpoint-url http://s3:9000 s3api create-bucket --bucket maroos-photos && exit 0;
         sleep 1; done; exit 1
 
+  # ---- Mailpit: a local test inbox for every email the app sends ----
   # Catches every email the app sends (nothing reaches real inboxes). Inbox: http://localhost:8025
   mailpit:
     image: axllent/mailpit:v1.31.2
@@ -64,10 +82,14 @@ services:
       - "1025:1025"
       - "8025:8025"
 
+  # ---- The Maroos app ----
   web:
+    # Build the image from the Dockerfile in this folder.
     build: .
     ports:
       - "8080:8080"
+    # Settings as environment variables ("__" = a nested setting, e.g. Uploads:S3:Bucket).
+    # Inside the compose network, services reach each other by name (db, s3).
     environment:
       ConnectionStrings__DefaultConnection: "Host=db;Database=maroos;Username=postgres;Password=maroos-local"
       Database__MigrateOnStartup: "true"
@@ -76,19 +98,23 @@ services:
       Uploads__S3__AccessKey: "maroos"
       Uploads__S3__SecretKey: "maroos-local-secret"
       Uploads__S3__ForcePathStyle: "true"
+      # Email goes to the Mailpit container (no login and no TLS locally).
       Email__From: "Maroos <no-reply@maroos.local>"
       Email__PublicBaseUrl: "http://localhost:8080"
       Email__Smtp__Host: "mailpit"
       Email__Smtp__Port: "1025"
       Email__Smtp__Security: "None"
+    # Start only once the database is healthy, the bucket exists and Mailpit has started.
     depends_on:
       db:
         condition: service_healthy
       s3-bucket:
         condition: service_completed_successfully
+      # Mailpit only needs to have started (it has no health check).
       mailpit:
         condition: service_started
 
+# Named volumes (deleted by `docker compose down -v`).
 volumes:
   db-data:
   s3-data:

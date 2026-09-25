@@ -1,23 +1,33 @@
+# =====================================================================================================
+# FILE: render.yaml
+# PURPOSE: A Render.com "Blueprint" — describes the hosting setup as code, so Render can create the
+# database and the web service in one go. Secrets are NOT stored here: entries with `sync: false`
+# make Render ask for the value in its dashboard.
+# =====================================================================================================
 # Render Blueprint: a Docker web service plus a PostgreSQL database.
 # In Render: New → Blueprint → pick this repository. Fill in the values marked sync: false when asked.
 # Plans and regions are left to Render's defaults; set them in the dashboard. See DEPLOY.md.
 
+# A managed PostgreSQL database.
 databases:
   - name: maroos-db
     databaseName: maroos
     user: maroos
 
 services:
+  # The web app, built from the Dockerfile. Render calls /health to know it's up.
   - type: web
     name: maroos
     runtime: docker
     dockerfilePath: ./Dockerfile
     healthCheckPath: /health
     envVars:
+      # The database's connection string, filled in by Render (a postgres:// URL; DatabaseSetup converts it).
       - key: ConnectionStrings__DefaultConnection
         fromDatabase:
           name: maroos-db
           property: connectionString
+      # Create/update tables at startup.
       - key: Database__MigrateOnStartup
         value: "true"
       # Render terminates HTTPS in front of the app; trust its X-Forwarded-* headers.

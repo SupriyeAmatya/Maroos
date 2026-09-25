@@ -1,3 +1,11 @@
+// =====================================================================================================
+// FILE: Maroos.Tests/Scryfall/ScryfallClientTests.cs
+// PURPOSE: ScryfallClient: parsing real Scryfall JSON (normal and double-faced cards, prices in cents),
+//   search/autocomplete URLs, 404 handling, /cards/collection batching in 75s and identifier pairing, and
+//   the 100 ms throttle.
+// Each test's name says what it proves; the '// TEST:' line above each one repeats it in plain words.
+// =====================================================================================================
+
 using System.Diagnostics;
 using System.Net;
 using System.Text.Json;
@@ -7,6 +15,7 @@ namespace Maroos.Tests.Scryfall;
 
 public class ScryfallClientTests
 {
+    // TEST: SearchAsync parses results and escapes the query.
     [Fact]
     public async Task SearchAsync_parses_results_and_escapes_the_query()
     {
@@ -20,6 +29,7 @@ public class ScryfallClientTests
         Assert.Equal("/cards/search?q=lightning%20bolt&page=1", handler.Requests.Single().PathAndQuery);
     }
 
+    // TEST: SearchAsync returns empty when scryfall finds nothing.
     [Fact]
     public async Task SearchAsync_returns_empty_when_scryfall_finds_nothing()
     {
@@ -29,6 +39,7 @@ public class ScryfallClientTests
         Assert.Equal(0, results.TotalCards);
     }
 
+    // TEST: SearchAsync throws on bad query syntax.
     [Fact]
     public async Task SearchAsync_throws_on_bad_query_syntax()
     {
@@ -40,6 +51,7 @@ public class ScryfallClientTests
         await Assert.ThrowsAsync<HttpRequestException>(() => handler.CreateClient().SearchAsync("t:"));
     }
 
+    // TEST: SearchAsync skips blank queries.
     [Fact]
     public async Task SearchAsync_skips_blank_queries()
     {
@@ -51,6 +63,7 @@ public class ScryfallClientTests
         Assert.Empty(handler.Requests);
     }
 
+    // TEST: AutocompleteAsync returns names.
     [Fact]
     public async Task AutocompleteAsync_returns_names()
     {
@@ -60,6 +73,7 @@ public class ScryfallClientTests
         Assert.Contains("Lightning Bolt", names);
     }
 
+    // TEST: AutocompleteAsync skips text shorter than two characters.
     [Fact]
     public async Task AutocompleteAsync_skips_text_shorter_than_two_characters()
     {
@@ -69,6 +83,7 @@ public class ScryfallClientTests
         Assert.Empty(handler.Requests);
     }
 
+    // TEST: GetCardAsync parses card fields prices and legalities.
     [Fact]
     public async Task GetCardAsync_parses_card_fields_prices_and_legalities()
     {
@@ -88,6 +103,7 @@ public class ScryfallClientTests
         Assert.NotNull(card.FrontImage?.Normal);
     }
 
+    // TEST: GetCardAsync takes the front image from the first face of a double faced card.
     [Fact]
     public async Task GetCardAsync_takes_the_front_image_from_the_first_face_of_a_double_faced_card()
     {
@@ -100,12 +116,14 @@ public class ScryfallClientTests
         Assert.Equal(card.CardFaces[0].ImageUris!.Normal, card.FrontImage!.Normal);
     }
 
+    // TEST: GetCardAsync returns null for unknown id.
     [Fact]
     public async Task GetCardAsync_returns_null_for_unknown_id()
     {
         Assert.Null(await FakeScryfallHandler.WithFixtures().CreateClient().GetCardAsync(Guid.NewGuid()));
     }
 
+    // TEST: GetCollectionAsync sends 75 names per request and pairs each with its card.
     [Fact]
     public async Task GetCollectionAsync_sends_75_names_per_request_and_pairs_each_with_its_card()
     {
@@ -125,6 +143,7 @@ public class ScryfallClientTests
         Assert.Contains("\"oracle_text\"", result.Found[CardIdentifier.ForName("Sol Ring")].Json);
     }
 
+    // TEST: GetCollectionAsync finds printings by set and collector number and cards by id.
     [Fact]
     public async Task GetCollectionAsync_finds_printings_by_set_and_collector_number_and_cards_by_id()
     {
@@ -136,6 +155,7 @@ public class ScryfallClientTests
         Assert.Equal([CardIdentifier.ForPrinting("c21", "9999")], result.NotFound);
     }
 
+    // TEST: GetCollectionAsync sends only the identifier fields that are set.
     [Fact]
     public async Task GetCollectionAsync_sends_only_the_identifier_fields_that_are_set()
     {
@@ -146,6 +166,7 @@ public class ScryfallClientTests
         Assert.Equal("""{"identifiers":[{"set":"c21","collector_number":"263"}]}""", handler.Requests.Single().Body);
     }
 
+    // TEST: GetCollectionAsync matches by name when scryfall results do not line up with the request.
     [Fact]
     public async Task GetCollectionAsync_matches_by_name_when_scryfall_results_do_not_line_up_with_the_request()
     {
@@ -163,6 +184,7 @@ public class ScryfallClientTests
         Assert.False(result.Found.ContainsKey(CardIdentifier.ForName("Nope")));
     }
 
+    // TEST: GetCollectionAsync ignores blank and duplicate names.
     [Fact]
     public async Task GetCollectionAsync_ignores_blank_and_duplicate_names()
     {
@@ -173,6 +195,7 @@ public class ScryfallClientTests
         Assert.Equal(1, IdentifierCount(handler.Requests.Single().Body!));
     }
 
+    // TEST: Requests are spaced by the throttle interval.
     [Fact]
     public async Task Requests_are_spaced_by_the_throttle_interval()
     {
@@ -188,6 +211,7 @@ public class ScryfallClientTests
         Assert.True(watch.ElapsedMilliseconds >= 190, $"took {watch.ElapsedMilliseconds} ms");
     }
 
+    // Helper: Identifier count.
     private static int IdentifierCount(string body) =>
         JsonDocument.Parse(body).RootElement.GetProperty("identifiers").GetArrayLength();
 }
