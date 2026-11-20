@@ -1,10 +1,3 @@
-// =====================================================================================================
-// FILE: Maroos.Tests/Email/AccountEmailHttpTests.cs
-// PURPOSE: The account emails over real HTTP: sign-up confirmation, logging in before
-// confirming, password reset, unknown addresses, changing email, and the auction-email switch in settings.
-// Test hosts don't run the dispatcher, so the tests read the queued emails from the database.
-// =====================================================================================================
-
 using System.Text;
 using AngleSharp.Html.Parser;
 using Maroos.Core.Email;
@@ -28,28 +21,23 @@ public class AccountEmailHttpTests : IClassFixture<MaroosWebFactory>, IAsyncLife
     public Task InitializeAsync() => _factory.InitializeDatabaseAsync();
     public Task DisposeAsync() => Task.CompletedTask;
 
-    // NewEmail: a unique address per test.
     private static string NewEmail() => $"{Guid.NewGuid():N}@example.com";
 
-    // UserAsync: the account with this email, straight from Identity.
     private async Task<ApplicationUser?> UserAsync(string email)
     {
         using var scope = _factory.Services.CreateScope();
         return await scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>().FindByEmailAsync(email);
     }
 
-    // EmailsToAsync: how many emails are queued to an address.
     private async Task<int> EmailsToAsync(string address)
     {
         using var scope = _factory.Services.CreateScope();
         return await scope.ServiceProvider.GetRequiredService<ApplicationDbContext>().OutgoingEmails.CountAsync(e => e.ToAddress == address);
     }
 
-    // IsSignedInAsync: the profile page greets signed-in users by their login name.
     private static async Task<bool> IsSignedInAsync(HttpClient browser, string email) =>
         (await browser.GetStringAsync("/profile")).Contains($"Signed in as {email}");
 
-    // TEST: Registering emails a confirmation link and logging in waits for it.
     [Fact]
     public async Task Registering_emails_a_confirmation_link_and_logging_in_waits_for_it()
     {
@@ -78,7 +66,6 @@ public class AccountEmailHttpTests : IClassFixture<MaroosWebFactory>, IAsyncLife
         Assert.True(await IsSignedInAsync(browser, email));
     }
 
-    // TEST: Forgot password emails a link that sets a new password.
     [Fact]
     public async Task Forgot_password_emails_a_link_that_sets_a_new_password()
     {
@@ -107,7 +94,6 @@ public class AccountEmailHttpTests : IClassFixture<MaroosWebFactory>, IAsyncLife
         Assert.True(await IsSignedInAsync(browser, email));
     }
 
-    // TEST: Forgot password for an unknown address sends nothing.
     [Fact]
     public async Task Forgot_password_for_an_unknown_address_sends_nothing()
     {
@@ -119,7 +105,6 @@ public class AccountEmailHttpTests : IClassFixture<MaroosWebFactory>, IAsyncLife
         Assert.Equal(0, await EmailsToAsync(email));
     }
 
-    // TEST: A new email address takes effect only once confirmed.
     [Fact]
     public async Task A_new_email_address_takes_effect_only_once_confirmed()
     {
@@ -140,7 +125,6 @@ public class AccountEmailHttpTests : IClassFixture<MaroosWebFactory>, IAsyncLife
         Assert.Null(await UserAsync(email));
     }
 
-    // TEST: The auction email switch is on by default and saves from account settings.
     [Fact]
     public async Task The_auction_email_switch_is_on_by_default_and_saves_from_account_settings()
     {

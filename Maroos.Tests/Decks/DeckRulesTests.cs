@@ -1,10 +1,3 @@
-// =====================================================================================================
-// FILE: Maroos.Tests/Decks/DeckRulesTests.cs
-// PURPOSE: DeckRules (Maroos.Core): deck size, copy limits (and basic-land/any-number exceptions),
-//   banned/restricted, not-legal cards, commander count and color identity.
-// Each test's name says what it proves; the '// TEST:' line above each one repeats it in plain words.
-// =====================================================================================================
-
 using Maroos.Core.Decks;
 using static Maroos.Tests.Decks.TestCards;
 
@@ -12,21 +5,18 @@ namespace Maroos.Tests.Decks;
 
 public class DeckRulesTests
 {
-    // Helper: Sixty cards.
     private static List<DeckEntry> SixtyCards(params DeckEntry[] extra)
     {
         var filler = 60 - extra.Where(e => e.Line.Board == Board.Main).Sum(e => e.Line.Quantity);
         return [.. extra, Entry(filler, Land())];
     }
 
-    // TEST: A legal 60 card deck has no issues.
     [Fact]
     public void A_legal_60_card_deck_has_no_issues()
     {
         Assert.Empty(DeckRules.Check("modern", SixtyCards(Entry(4, Card("Lightning Bolt")))));
     }
 
-    // TEST: Banned and not legal cards are reported once per card name.
     [Fact]
     public void Banned_and_not_legal_cards_are_reported_once_per_card_name()
     {
@@ -45,7 +35,6 @@ public class DeckRulesTests
         ], issues.Select(i => (i.Kind, i.Message, i.CardName)));
     }
 
-    // TEST: Constructed decks need 60 cards and at most 15 in the sideboard.
     [Fact]
     public void Constructed_decks_need_60_cards_and_at_most_15_in_the_sideboard()
     {
@@ -62,7 +51,6 @@ public class DeckRulesTests
         ], issues.Select(i => i.Message));
     }
 
-    // TEST: Commander decks need exactly 100 cards including the commander.
     [Fact]
     public void Commander_decks_need_exactly_100_cards_including_the_commander()
     {
@@ -73,7 +61,6 @@ public class DeckRulesTests
         Assert.Equal(DeckIssueKind.DeckSize, Assert.Single(DeckRules.Check("commander", [krenko, Entry(100, Land())])).Kind);
     }
 
-    // TEST: Commander cards must fit the commanders color identity.
     [Fact]
     public void Commander_cards_must_fit_the_commanders_color_identity()
     {
@@ -97,7 +84,6 @@ public class DeckRulesTests
         ], issues.Select(i => (i.Kind, i.Message, i.CardName)));
     }
 
-    // TEST: Partner commanders combine their colors and constructed decks skip the check.
     [Fact]
     public void Partner_commanders_combine_their_colors_and_constructed_decks_skip_the_check()
     {
@@ -111,7 +97,6 @@ public class DeckRulesTests
         Assert.Empty(DeckRules.Check("modern", SixtyCards(Entry(4, Card("Counterspell", colors: ["U"])))));
     }
 
-    // TEST: Commander decks need a commander.
     [Fact]
     public void Commander_decks_need_a_commander()
     {
@@ -120,7 +105,6 @@ public class DeckRulesTests
         Assert.Equal(DeckIssueKind.Commander, issue.Kind);
     }
 
-    // TEST: More than four copies is too many across printings and boards.
     [Fact]
     public void More_than_four_copies_is_too_many_across_printings_and_boards()
     {
@@ -137,7 +121,6 @@ public class DeckRulesTests
         Assert.Equal("Lightning Bolt", issue.CardName);
     }
 
-    // TEST: Commander is singleton except basic lands.
     [Fact]
     public void Commander_is_singleton_except_basic_lands()
     {
@@ -152,7 +135,6 @@ public class DeckRulesTests
         Assert.Equal("2 copies of Sol Ring; Commander allows 1.", Assert.Single(issues).Message);
     }
 
-    // TEST: Cards that say how many copies are allowed override the limit.
     [Theory]
     [InlineData("A deck can have any number of cards named Relentless Rats.", 30, false)]
     [InlineData("A deck can have up to seven cards named Seven Dwarves.", 7, false)]
@@ -165,7 +147,6 @@ public class DeckRulesTests
         Assert.Equal(tooMany, issues.Any(i => i.Kind == DeckIssueKind.TooManyCopies));
     }
 
-    // TEST: Restricted cards allow one copy.
     [Fact]
     public void Restricted_cards_allow_one_copy()
     {
@@ -178,7 +159,6 @@ public class DeckRulesTests
         Assert.Equal("2 copies of Sol Ring; it's restricted to 1 in Vintage.", issue.Message);
     }
 
-    // TEST: Cards without scryfall data are flagged.
     [Fact]
     public void Cards_without_scryfall_data_are_flagged()
     {
@@ -188,7 +168,6 @@ public class DeckRulesTests
         Assert.Equal("Mystery Card", issue.CardName);
     }
 
-    // TEST: RulesFor knows each formats size and copy limit.
     [Theory]
     [InlineData("commander", 100, 1, true)]
     [InlineData("paupercommander", 100, 1, true)]

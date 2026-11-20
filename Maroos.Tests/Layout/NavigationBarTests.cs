@@ -1,11 +1,3 @@
-// =====================================================================================================
-// FILE: Maroos.Tests/Layout/NavigationBarTests.cs
-// PURPOSE: The top navigation bar over real HTTP: every link has an icon and a readable label,
-// the pin button and its script are there, the dark mode toggle is there and its script runs before any
-// stylesheet, the old sidebar is gone, the current page is highlighted, and
-// signed-in users get Account and Log out.
-// =====================================================================================================
-
 using AngleSharp.Dom;
 using AngleSharp.Html.Parser;
 using Maroos.Tests.Auth;
@@ -26,19 +18,15 @@ public class NavigationBarTests : IClassFixture<MaroosWebFactory>, IAsyncLifetim
     public Task InitializeAsync() => _factory.InitializeDatabaseAsync();
     public Task DisposeAsync() => Task.CompletedTask;
 
-    // PageAsync: fetch a page and parse its HTML (AngleSharp), so tests can query it like a browser would.
     private static async Task<IDocument> PageAsync(HttpClient browser, string url) =>
         new HtmlParser().ParseDocument(await browser.GetStringAsync(url));
 
-    // MainNav: the bar's <nav aria-label="Main">, or fail the test.
     private static IElement MainNav(IDocument page) =>
         page.QuerySelector("nav[aria-label='Main']") ?? throw new Xunit.Sdk.XunitException("No main navigation bar.");
 
-    // Link: the bar's link to a given address, or fail the test.
     private static IElement Link(IElement nav, string href) =>
         nav.QuerySelector($".nav-items a[href='{href}']") ?? throw new Xunit.Sdk.XunitException($"No link to '{href}' in the bar.");
 
-    // TEST: Each link has an icon and a label screen readers can read.
     [Theory]
     [InlineData("", "Home")]
     [InlineData("search", "Search")]
@@ -56,7 +44,6 @@ public class NavigationBarTests : IClassFixture<MaroosWebFactory>, IAsyncLifetim
         Assert.Equal("true", link.QuerySelector(".nav-icon")?.GetAttribute("aria-hidden"));
     }
 
-    // TEST: The bar has a pin to always show labels and loads its script.
     [Fact]
     public async Task The_bar_has_a_pin_to_always_show_labels_and_loads_its_script()
     {
@@ -70,11 +57,6 @@ public class NavigationBarTests : IClassFixture<MaroosWebFactory>, IAsyncLifetim
         Assert.NotNull(page.Head!.QuerySelector("script[src^='nav']"));
     }
 
-    // TEST: The bar has a dark mode toggle whose script runs before any styles.
-    // Step 1: the toggle is in the bar, starts "not pressed" (the server always renders light; theme.js corrects it
-    // in the browser), and has a readable label.
-    // Step 2: in <head>, theme.js comes before the first stylesheet. If someone moved it below, dark-mode visitors
-    // would see a white flash on every page load, and this test would fail.
     [Fact]
     public async Task The_bar_has_a_dark_mode_toggle_whose_script_runs_before_any_styles()
     {
@@ -93,7 +75,6 @@ public class NavigationBarTests : IClassFixture<MaroosWebFactory>, IAsyncLifetim
         Assert.True(script < firstStyles, "theme script must come before the stylesheets");
     }
 
-    // TEST: The old sidebar is gone.
     [Fact]
     public async Task The_old_sidebar_is_gone()
     {
@@ -103,7 +84,6 @@ public class NavigationBarTests : IClassFixture<MaroosWebFactory>, IAsyncLifetim
         Assert.Null(page.QuerySelector(".navbar-toggler"));
     }
 
-    // TEST: The current page is highlighted.
     [Fact]
     public async Task The_current_page_is_highlighted()
     {
@@ -113,7 +93,6 @@ public class NavigationBarTests : IClassFixture<MaroosWebFactory>, IAsyncLifetim
         Assert.DoesNotContain("active", Link(nav, "decks").ClassList);
     }
 
-    // TEST: Signed in users get account and log out instead of register and log in.
     [Fact]
     public async Task Signed_in_users_get_account_and_log_out_instead_of_register_and_log_in()
     {

@@ -1,10 +1,3 @@
-// =====================================================================================================
-// FILE: Maroos.Tests/Auctions/AuctionPagesHttpTests.cs
-// PURPOSE: Auction pages over real HTTP (MaroosWebFactory): listing needs an account, visitors can view but
-//   not cancel, GET filters work, uploaded photos are served as JPEG with nosniff.
-// Each test's name says what it proves; the '// TEST:' line above each one repeats it in plain words.
-// =====================================================================================================
-
 using Maroos.Core.Auctions;
 using Maroos.Tests.Auth;
 using Maroos.Tests.Scryfall;
@@ -32,7 +25,6 @@ public class AuctionPagesHttpTests : IClassFixture<MaroosWebFactory>, IAsyncLife
     {
         var email = $"{Guid.NewGuid():N}@example.com";
         var browser = _factory.NewBrowser();
-        // Register, follow the confirmation link from the queued email, and log in.
         (await _factory.RegisterAndConfirmAsync(browser, email, displayName)).EnsureSuccessStatusCode();
 
         using var scope = _factory.Services.CreateScope();
@@ -40,7 +32,6 @@ public class AuctionPagesHttpTests : IClassFixture<MaroosWebFactory>, IAsyncLife
         return (browser, user!.Id);
     }
 
-    // Helper: List async.
     private async Task<Auction> ListAsync(string sellerId, string? photoPath = null)
     {
         using var scope = _factory.Services.CreateScope();
@@ -48,7 +39,6 @@ public class AuctionPagesHttpTests : IClassFixture<MaroosWebFactory>, IAsyncLife
             new NewAuction(Fixtures.SolRingC21Id, CardCondition.NearMint, false, 1250, 100, 7, photoPath));
     }
 
-    // TEST: Listing a card needs an account.
     [Fact]
     public async Task Listing_a_card_needs_an_account()
     {
@@ -57,7 +47,6 @@ public class AuctionPagesHttpTests : IClassFixture<MaroosWebFactory>, IAsyncLife
         Assert.Equal("/Account/Login", response.RequestMessage!.RequestUri!.AbsolutePath);
     }
 
-    // TEST: A listed card shows on auctions and visitors can view but not cancel it.
     [Fact]
     public async Task A_listed_card_shows_on_auctions_and_visitors_can_view_but_not_cancel_it()
     {
@@ -78,7 +67,6 @@ public class AuctionPagesHttpTests : IClassFixture<MaroosWebFactory>, IAsyncLife
         Assert.Contains("Cancel auction", await seller.GetStringAsync($"/auctions/{auction.Id}"));
     }
 
-    // TEST: Filters apply from the query string.
     [Fact]
     public async Task Filters_apply_from_the_query_string()
     {
@@ -90,7 +78,6 @@ public class AuctionPagesHttpTests : IClassFixture<MaroosWebFactory>, IAsyncLife
         Assert.Contains("isn't a price", await _factory.NewBrowser().GetStringAsync("/auctions?max=lots"));
     }
 
-    // TEST: Uploaded photos are served as jpegs with nosniff.
     [Fact]
     public async Task Uploaded_photos_are_served_as_jpegs_with_nosniff()
     {
@@ -105,7 +92,6 @@ public class AuctionPagesHttpTests : IClassFixture<MaroosWebFactory>, IAsyncLife
         Assert.Equal("nosniff", response.Headers.GetValues("X-Content-Type-Options").Single());
     }
 
-    // TEST: Registering needs a display name.
     [Fact]
     public async Task Registering_needs_a_display_name()
     {
